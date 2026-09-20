@@ -1,46 +1,256 @@
 /**
  * Validation Runner Integration Tests
  *
- * Tests the real process-based validation runner capabilities
+ * Tests ProcessValidationRunner with real child processes
+ * and fixture workspaces
  */
 
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import path from "path";
+import fs from "fs/promises";
 import {
-  runValidationCheck,
-  runValidationSuite,
-  calculateChecksum,
-  verifyArtifactChecksum,
-} from "../../src/validation/validation-runner.js";
+  ProcessValidationRunner,
+  resolveNpmExecutable,
+  validateWorkspacePath,
+} from "../../src/validation/process-validation-runner.js";
 
-describe("Validation Runner Integration Tests", () => {
-  test("checksum calculation: format and consistency", () => {
-    const content = "test artifact content";
-    const checksum = calculateChecksum(content);
+const fixturesDir = path.resolve("tests/fixtures/validation");
 
-    // Verify checksum format: sha256:<64-hex>
-    const pattern = /^sha256:[a-f0-9]{64}$/;
-    assert(pattern.test(checksum), `Checksum format invalid: ${checksum}`);
-
-    // Same content produces same checksum
-    const checksum2 = calculateChecksum(content);
-    assert.strictEqual(checksum, checksum2);
-
-    // Different content produces different checksum
-    const checksum3 = calculateChecksum("different content");
-    assert.notStrictEqual(checksum, checksum3);
-
-    // Buffer input works
-    const bufferChecksum = calculateChecksum(Buffer.from(content));
-    assert.strictEqual(checksum, bufferChecksum);
+describe("ProcessValidationRunner Integration Tests", () => {
+  test("resolveNpmExecutable: Windows", () => {
+    assert.strictEqual(resolveNpmExecutable("win32"), "npm.cmd");
   });
 
-  test("single check execution: successful validation", async () => {
-    const checksum = calculateChecksum("test artifact");
-    const result = await runValidationCheck("typecheck", checksum);
+  test("resolveNpmExecutable: POSIX", () => {
+    assert.strictEqual(resolveNpmExecutable("linux"), "npm");
+    assert.strictEqual(resolveNpmExecutable("darwin"), "npm");
+  });
 
-    // Verify result structure
-    assert.strictEqual(result.check_id, "typecheck");
+  test("validateWorkspacePath: accepts relative paths", async () => {
+    const result = await validateWorkspacePath("src", process.cwd());
+    assert(result.valid);
+  });
+
+  test("validateWorkspacePath: rejects absolute paths", async () => {
+    const result = await validateWorkspacePath("/absolute/path", process.cwd());
+    assert(!result.valid);
+    assert(result.error?.includes("relative"));
+  });
+
+  test("validateWorkspacePath: rejects path traversal", async () => {
+    const result = await validateWorkspacePath("../../../etc", process.cwd());
+    assert(!result.valid);
+    assert(result.error?.includes("traversal"));
+  });
+
+  test("validateWorkspacePath: rejects Windows drives", async () => {
+    const result = await validateWorkspacePath("C:/Windows", ".");
+    assert(!result.valid);
+    assert(result.error?.includes("relative"));
+  });
+
+  test("validateWorkspacePath: rejects UNC paths", async () => {
+    const result = await validateWorkspacePath("//server/share", ".");
+    assert(!result.valid);
+    assert(result.error?.includes("relative"));
+  });
+
+  test("valid-workspace: build and test pass", async () => {
+    const validDir = path.join(fixturesDir, "valid-workspace");
+    const runner = new ProcessValidationRunner(validDir);
+    const checksum = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+
+    // Run build check
+    const buildResult = await runner.runCheck("build", checksum);
+    assert.strictEqual(buildResult.check_id, "build");
+    assert.strictEqual(
+      buildResult.status,
+      "passed",
+      `Build failed: ${buildResult.stderr_summary}`
+    );
+    assert.strictEqual(buildResult.exit_code, 0);
+
+    // Run test check
+    const testResult = await runner.runCheck("test", checksum);
+    assert.strictEqual(testResult.check_id, "test");
+    assert.strictEqual(
+      testResult.status,
+      "passed",
+      `Test failed: ${testResult.stderr_summary}`
+    );
+    assert.strictEqual(testResult.exit_code, 0);
+
+    // Run suite
+    const suite = await runner.runSuite(["build", "test"], checksum);
+    assert.strictEqual(suite.total_checks, 2);
+    assert.strictEqual(suite.passed_checks, 2);
+    assert.strictEqual(suite.failed_checks, 0);
+  });
+
+  test("build-fail-workspace: build fails", async () => {
+    const buildFailDir = path.join(fixturesDir, "build-fail-workspace");
+    const runner = new ProcessValidationRunner(buildFailDir);
+
+    const result = await runner.runCheck("build");
+    assert.strictEqual(result.status, "failed");
+    assert(result.exit_code !== 0);
+    assert(result.stderr_summary.length > 0);
+  });
+
+  test("test-fail-workspace: test fails", async () => {
+    const testFailDir = path.join(fixturesDir, "test-fail-workspace");
+    const runner = new ProcessValidationRunner(testFailDir);
+
+    // Build should pass
+    const buildResult = await runner.runCheck("build");
+    assert.strictEqual(buildResult.status, "passed");
+
+    // Test should fail
+    const testResult = await runner.runCheck("test");
+    assert.strictEqual(testResult.status, "failed");
+    assert(testResult.exit_code !== 0);
+  });
+
+  test("unknown check rejection", async () => {
+    const runner = new ProcessValidationRunner(fixturesDir);
+    const report = await runner.runSuite(["unknown-check-id"]);
+
+    assert.strictEqual(report.failed_checks, 1);
+    assert(report.checks[0].status === "error");
+    assert(report.checks[0].stderr_summary.includes("not found"));
+  });
+
+  test("workspace path escape prevention", async () => {
+    // Test that relative path with ".." is rejected at validation level
+    const result = await validateWorkspacePath("../../../etc/passwd", process.cwd());
+    assert(!result.valid);
+    assert(result.error?.includes("traversal"));
+  });
+
+  test("checksum preservation in results", async () => {
+    const runner = new ProcessValidationRunner(fixturesDir);
+    const checksum = "sha256:2222222222222222222222222222222222222222222222222222222222222222";
+
+    const result = await runner.runCheck("typecheck", checksum);
+    assert.strictEqual(result.artifact_checksum, checksum);
+
+    const suite = await runner.runSuite(["typecheck"], checksum);
+    for (const check of suite.checks) {
+      assert.strictEqual(check.artifact_checksum, checksum);
+    }
+  });
+
+  test("timeout-workspace: timeout handling", async () => {
+    const timeoutDir = path.join(fixturesDir, "timeout-workspace");
+    const markerFile = path.join(timeoutDir, "marker.txt");
+
+    // Clean marker file if it exists
+    try {
+      await fs.unlink(markerFile);
+    } catch {
+      // File doesn't exist, that's fine
+    }
+
+    const runner = new ProcessValidationRunner(timeoutDir);
+
+    // Run test check with 5 second timeout (short enough to trigger)
+    // The timeout-workspace test hangs indefinitely
+    const result = await runner.runCheck("test");
+
+    // Should timeout
+    assert.strictEqual(
+      result.status,
+      "error",
+      `Expected timeout error, got: ${result.status}`
+    );
+    assert(
+      result.stderr_summary.includes("timeout") ||
+      result.stderr_summary.includes("Timeout"),
+      `Expected timeout message, got: ${result.stderr_summary}`
+    );
+
+    // Wait a bit to ensure child process would have created marker file
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Marker file should NOT exist because process was killed
+    let markerExists = false;
+    try {
+      await fs.stat(markerFile);
+      markerExists = true;
+    } catch {
+      // File doesn't exist - process was properly terminated
+    }
+
+    assert(
+      !markerExists,
+      "Marker file should not exist (process should be terminated)"
+    );
+  });
+
+  test("security: injection attack rejection", async () => {
+    const runner = new ProcessValidationRunner(fixturesDir);
+
+    // Try various injection patterns
+    const injectionAttempts = [
+      "build; echo hacked",
+      "build && echo hacked",
+      "npm test",
+      "../build",
+      "build | cat",
+    ];
+
+    for (const attempt of injectionAttempts) {
+      const result = await runner.runCheck(attempt);
+      assert.strictEqual(
+        result.status,
+        "error",
+        `Injection "${attempt}" should be rejected`
+      );
+      assert(
+        result.stderr_summary.includes("not found") ||
+          result.stderr_summary.includes("error"),
+        `No error message for injection: ${attempt}`
+      );
+    }
+  });
+
+  test("environment variable allowlist", async () => {
+    const runner = new ProcessValidationRunner(fixturesDir);
+
+    // Set a secret that should be filtered
+    const originalEnv = process.env.ANTHROPIC_API_KEY;
+    try {
+      process.env.ANTHROPIC_API_KEY = "secret-key-12345";
+      const result = await runner.runCheck("typecheck");
+
+      // Secret should not appear in results
+      assert(!result.stdout_summary.includes("secret-key"));
+      assert(!result.stderr_summary.includes("secret-key"));
+    } finally {
+      if (originalEnv) {
+        process.env.ANTHROPIC_API_KEY = originalEnv;
+      } else {
+        delete process.env.ANTHROPIC_API_KEY;
+      }
+    }
+  });
+
+  test("output size limiting", async () => {
+    const runner = new ProcessValidationRunner(fixturesDir);
+    const result = await runner.runCheck("typecheck");
+
+    // Verify outputs are summarized (limited to 500 chars)
+    assert(result.stdout_summary.length <= 500);
+    assert(result.stderr_summary.length <= 500);
+  });
+
+  test("check result structure", async () => {
+    const runner = new ProcessValidationRunner(fixturesDir);
+    const result = await runner.runCheck("build");
+
+    // Verify all required fields
+    assert(typeof result.check_id === "string");
     assert(["passed", "failed", "error"].includes(result.status));
     assert(typeof result.duration_ms === "number");
     assert(result.duration_ms >= 0);
@@ -48,142 +258,27 @@ describe("Validation Runner Integration Tests", () => {
     assert(typeof result.stderr_summary === "string");
     assert(typeof result.started_at === "string");
     assert(typeof result.finished_at === "string");
-    assert.strictEqual(result.artifact_checksum, checksum);
 
-    // Verify exit code is set on failure
-    if (result.status === "failed" || result.status === "error") {
+    if (result.status !== "passed") {
       assert(typeof result.exit_code === "number");
     }
   });
 
-  test("validation suite: multiple checks", async () => {
-    const checksum = calculateChecksum("suite test");
-    const report = await runValidationSuite(["typecheck"], checksum);
+  test("suite aggregation", async () => {
+    const runner = new ProcessValidationRunner(fixturesDir);
+    const checksum = "sha256:3333333333333333333333333333333333333333333333333333333333333333";
 
-    // Verify report structure
-    assert(report.total_checks > 0);
-    assert(report.passed_checks >= 0);
-    assert(report.failed_checks >= 0);
-    assert(Array.isArray(report.checks));
-    assert(typeof report.generated_at === "string");
+    const suite = await runner.runSuite(["typecheck", "build"], checksum);
 
-    // Verify check results have checksums
-    for (const check of report.checks) {
+    // Verify suite structure
+    assert.strictEqual(suite.total_checks, 2);
+    assert(suite.passed_checks + suite.failed_checks > 0);
+    assert(Array.isArray(suite.checks));
+    assert.strictEqual(suite.checks.length, 2);
+
+    // Each check should have the checksum
+    for (const check of suite.checks) {
       assert.strictEqual(check.artifact_checksum, checksum);
     }
-  });
-
-  test("unknown check rejection: registry validation", async () => {
-    const report = await runValidationSuite(["unknown-check-id"]);
-
-    // Unknown checks should fail immediately
-    assert.strictEqual(report.total_checks, 1);
-    assert.strictEqual(report.failed_checks, 1);
-    assert.strictEqual(report.passed_checks, 0);
-    assert(report.checks[0].status === "error");
-    assert(
-      report.checks[0].stderr_summary.includes("not found"),
-      `Expected error message, got: ${report.checks[0].stderr_summary}`
-    );
-  });
-
-  test("artifact checksum verification", () => {
-    // Create a mock report with matching checksums
-    const checksum = "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
-    const report = {
-      total_checks: 1,
-      passed_checks: 1,
-      failed_checks: 0,
-      skipped_checks: 0,
-      checks: [
-        {
-          check_id: "build",
-          status: "passed" as const,
-          exit_code: 0,
-          duration_ms: 100,
-          stdout_summary: "ok",
-          stderr_summary: "",
-          artifact_checksum: checksum,
-          started_at: new Date().toISOString(),
-          finished_at: new Date().toISOString(),
-        },
-      ],
-      generated_at: new Date().toISOString(),
-    };
-
-    assert(verifyArtifactChecksum(report, checksum));
-  });
-
-  test("artifact checksum verification: mismatch detection", () => {
-    const checksum1 = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
-    const checksum2 = "sha256:2222222222222222222222222222222222222222222222222222222222222222";
-
-    const report = {
-      total_checks: 1,
-      passed_checks: 1,
-      failed_checks: 0,
-      skipped_checks: 0,
-      checks: [
-        {
-          check_id: "build",
-          status: "passed" as const,
-          exit_code: 0,
-          duration_ms: 100,
-          stdout_summary: "ok",
-          stderr_summary: "",
-          artifact_checksum: checksum1,
-          started_at: new Date().toISOString(),
-          finished_at: new Date().toISOString(),
-        },
-      ],
-      generated_at: new Date().toISOString(),
-    };
-
-    assert(!verifyArtifactChecksum(report, checksum2));
-  });
-
-  test("check without checksum", async () => {
-    const result = await runValidationCheck("typecheck");
-
-    // Should execute normally without checksum
-    assert.strictEqual(result.check_id, "typecheck");
-    assert(["passed", "failed", "error"].includes(result.status));
-    assert(result.artifact_checksum === undefined);
-  });
-
-  test("validation suite with multiple check IDs", async () => {
-    const checksum = calculateChecksum("multi-check test");
-    const report = await runValidationSuite(["typecheck", "build"], checksum);
-
-    // Should attempt both checks
-    assert(report.total_checks >= 1);
-    for (const check of report.checks) {
-      assert.strictEqual(check.artifact_checksum, checksum);
-    }
-  });
-
-  test("timeout handling in checks", async () => {
-    // This test verifies timeout behavior is handled
-    // (actual timeout would need a check that exceeds timeout_ms)
-    const report = await runValidationSuite(["typecheck"]);
-
-    // Verify timeout scenarios are handled in results
-    for (const check of report.checks) {
-      if (check.duration_ms > 30000) {
-        // If it took longer than typecheck timeout, should be error
-        assert.strictEqual(check.status, "error");
-      }
-    }
-  });
-
-  test("output masking: sensitive data protection", async () => {
-    // Verify that sensitive patterns are masked
-    const checksum = calculateChecksum("test");
-    const result = await runValidationCheck("typecheck", checksum);
-
-    // Check that API keys and tokens are not in output
-    const output = result.stdout_summary + result.stderr_summary;
-    assert(!output.includes("ANTHROPIC_API_KEY="));
-    assert(!output.match(/api[_-]?key=/i));
   });
 });

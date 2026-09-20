@@ -2,6 +2,6 @@
   "private": true,
   "scripts": {
     "build": "node --check src/index.js",
-    "test": "timeout 2 node --test tests/index.test.js || exit 124"
+    "test": "node --test tests/index.test.js"
   }
 }

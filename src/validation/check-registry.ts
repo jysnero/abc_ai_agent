@@ -34,7 +34,7 @@ export const CHECK_REGISTRY: Record<string, CheckDefinition> = {
     timeout_ms: 30000,
     max_output_bytes: 1024 * 100, // 100KB
     cwd: process.cwd(),
-    allowed_env_vars: ["PATH", "HOME", "TEMP", "NODE_PATH"],
+    allowed_env_vars: ["PATH", "TEMP"],
   },
 
   "unit-test": {
@@ -44,7 +44,7 @@ export const CHECK_REGISTRY: Record<string, CheckDefinition> = {
     timeout_ms: 60000,
     max_output_bytes: 1024 * 500, // 500KB
     cwd: process.cwd(),
-    allowed_env_vars: ["PATH", "HOME", "TEMP", "NODE_PATH"],
+    allowed_env_vars: ["PATH", "TEMP"],
   },
 
   "architecture-check": {
@@ -54,7 +54,7 @@ export const CHECK_REGISTRY: Record<string, CheckDefinition> = {
     timeout_ms: 30000,
     max_output_bytes: 1024 * 100,
     cwd: process.cwd(),
-    allowed_env_vars: ["PATH", "HOME", "TEMP"],
+    allowed_env_vars: ["PATH", "TEMP"],
   },
 
   "build": {
@@ -64,7 +64,7 @@ export const CHECK_REGISTRY: Record<string, CheckDefinition> = {
     timeout_ms: 60000,
     max_output_bytes: 1024 * 200, // 200KB
     cwd: process.cwd(),
-    allowed_env_vars: ["PATH", "HOME", "TEMP", "NODE_PATH"],
+    allowed_env_vars: ["PATH", "TEMP"],
   },
 
   "test": {
@@ -74,7 +74,7 @@ export const CHECK_REGISTRY: Record<string, CheckDefinition> = {
     timeout_ms: 60000,
     max_output_bytes: 1024 * 500, // 500KB
     cwd: process.cwd(),
-    allowed_env_vars: ["PATH", "HOME", "TEMP", "NODE_PATH"],
+    allowed_env_vars: ["PATH", "TEMP"],
   },
 };
 
