@@ -302,4 +302,38 @@ describe("Workflow Runner Integration Tests (with FakeValidationRunner)", () => 
       assert.equal(status.blocked, false);
     });
   });
+
+  describe("Scenario G: Timeout Structure Validation", () => {
+    it("should structure timeout status with metadata", async () => {
+      // Verify timeout status is properly structured (not just "error")
+      const validationRunner = new FakeValidationRunner([
+        {
+          checkId: "typecheck",
+          status: "timed_out",
+          timedOut: true,
+          errorCode: "PROCESS_TIMEOUT",
+          timeoutMs: 1000,
+          terminationMethod: "taskkill",
+          processTreeTerminationSucceeded: true,
+        },
+      ]);
+
+      // Run validation with timeout
+      const report = await validationRunner.runSuite(["typecheck"]);
+
+      // Verify structured timeout status
+      assert.equal(report.checks[0].status, "timed_out", "Should have timed_out status");
+      assert.equal(report.checks[0].timedOut, true, "Should have timedOut flag");
+      assert.equal(report.checks[0].errorCode, "PROCESS_TIMEOUT", "Should have errorCode");
+      assert.equal(report.checks[0].timeoutMs, 1000, "Should have timeoutMs");
+      assert.equal(report.checks[0].terminationMethod, "taskkill", "Should have terminationMethod");
+      assert.equal(report.checks[0].processTreeTerminationSucceeded, true, "Should have processTreeTerminationSucceeded");
+
+      // Verify report-level timeout counter
+      assert.ok(report.timed_out_checks, "Should have timed_out_checks counter");
+      assert.equal(report.timed_out_checks, 1, "Should count 1 timeout");
+
+      // Workflow integration tested separately (v0.2+): timeout → NEEDS_HUMAN_REVIEW, no repair
+    });
+  });
 });

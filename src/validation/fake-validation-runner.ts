@@ -12,10 +12,15 @@ import type { IValidationRunner, ValidationCheckResult, ValidationReport } from 
  */
 export interface ValidationScenario {
   checkId: string;
-  status: "passed" | "failed" | "error";
+  status: "passed" | "failed" | "timed_out" | "error";
   exitCode?: number;
   stdout?: string;
   stderr?: string;
+  timedOut?: boolean;
+  errorCode?: string;
+  timeoutMs?: number;
+  terminationMethod?: string;
+  processTreeTerminationSucceeded?: boolean;
 }
 
 /**
@@ -56,6 +61,11 @@ export class FakeValidationRunner implements IValidationRunner {
       artifact_checksum: artifactChecksum,
       started_at: startedAt,
       finished_at: new Date(Date.now() + 500).toISOString(),
+      timedOut: scenario.timedOut,
+      errorCode: scenario.errorCode,
+      timeoutMs: scenario.timeoutMs,
+      terminationMethod: scenario.terminationMethod,
+      processTreeTerminationSucceeded: scenario.processTreeTerminationSucceeded,
     };
   }
 
@@ -69,18 +79,21 @@ export class FakeValidationRunner implements IValidationRunner {
     const checks: ValidationCheckResult[] = [];
     let passedCount = 0;
     let failedCount = 0;
+    let timedOutCount = 0;
 
     for (const checkId of checkIds) {
       const result = await this.runCheck(checkId, artifactChecksum);
       checks.push(result);
       if (result.status === "passed") passedCount++;
       if (result.status === "failed") failedCount++;
+      if (result.status === "timed_out") timedOutCount++;
     }
 
     return {
       total_checks: checks.length,
       passed_checks: passedCount,
       failed_checks: failedCount,
+      timed_out_checks: timedOutCount > 0 ? timedOutCount : undefined,
       skipped_checks: 0,
       checks,
       generated_at: new Date().toISOString(),

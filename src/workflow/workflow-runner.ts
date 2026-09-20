@@ -185,6 +185,36 @@ export class WorkflowRunner {
       JSON.stringify(initialReportWithMetadata, null, 2)
     );
 
+    // Timeout 발생 시 즉시 NEEDS_HUMAN_REVIEW로 전환 (repair 미실행)
+    if (initialValidationReport.timed_out_checks && initialValidationReport.timed_out_checks > 0) {
+      // Timeout 진단정보 저장
+      const timeoutDiagnosis = {
+        run_id: runId,
+        timeout_occurred_at: "validation/initial",
+        timed_out_checks: initialValidationReport.timed_out_checks,
+        total_checks: initialValidationReport.total_checks,
+        timed_out_check_details: initialValidationReport.checks
+          .filter((c: any) => c.status === "timed_out")
+          .map((c: any) => ({
+            check_id: c.check_id,
+            timeoutMs: c.timeoutMs,
+            terminationMethod: c.terminationMethod,
+            processTreeTerminationSucceeded: c.processTreeTerminationSucceeded,
+          })),
+        escalation_reason: "Validation timeout - not a code error, requires human investigation",
+        created_at: new Date().toISOString(),
+      };
+      await saveArtifact(runId, "timeout-diagnosis", JSON.stringify(timeoutDiagnosis, null, 2));
+
+      // NEEDS_HUMAN_REVIEW로 전환
+      await transitionState(runId, "NEEDS_HUMAN_REVIEW");
+      throw new Error(
+        `Validation timeout detected: ${initialValidationReport.timed_out_checks} check(s) timed out. ` +
+        `This may indicate an infinite loop, resource exhaustion, or environmental issue. ` +
+        `Escalating to human review instead of automatic repair.`
+      );
+    }
+
     // Auto-repair loop (최대 3회)
     let finalDevResultJson = devResultJson;
     let finalValidationReport = initialValidationReport;
@@ -217,6 +247,15 @@ export class WorkflowRunner {
       // Re-validate
       const repairChecksum = calculateChecksum(finalDevResultJson);
       finalValidationReport = await this.validationRunner.runSuite(checkIds, repairChecksum);
+
+      // Timeout 발생 시 loop 탈출
+      if (finalValidationReport.timed_out_checks && finalValidationReport.timed_out_checks > 0) {
+        console.log(
+          `Timeout detected during repair attempt ${repairAttempt}: ${finalValidationReport.timed_out_checks} check(s) timed out. ` +
+          `Stopping repair loop and escalating to human review.`
+        );
+        break; // repair loop 종료, 아래의 failed_checks > 0 체크에서 NEEDS_HUMAN_REVIEW로 전환
+      }
 
       // Repair validation report 저장 (revision-based)
       const repairReportWithMetadata = {
@@ -266,11 +305,19 @@ export class WorkflowRunner {
     await saveArtifact(runId, "validation-summary", JSON.stringify(validationSummary, null, 2));
 
     // 검증 완료 확인
-    if (finalValidationReport.failed_checks > 0) {
+    const hasTimeouts = finalValidationReport.timed_out_checks && finalValidationReport.timed_out_checks > 0;
+    if (finalValidationReport.failed_checks > 0 || hasTimeouts) {
       await transitionState(runId, "NEEDS_HUMAN_REVIEW");
-      throw new Error(
-        `Validation failed after ${repairAttempt} repair attempts: ${finalValidationReport.failed_checks} checks failed`
-      );
+      if (hasTimeouts) {
+        throw new Error(
+          `Validation timeout detected: ${finalValidationReport.timed_out_checks} check(s) timed out after ${repairAttempt} repair attempts. ` +
+          `Escalating to human review.`
+        );
+      } else {
+        throw new Error(
+          `Validation failed after ${repairAttempt} repair attempts: ${finalValidationReport.failed_checks} checks failed`
+        );
+      }
     }
 
     // HUMAN_GATE_RELEASE에 도달
@@ -345,5 +392,12 @@ export class WorkflowRunner {
       },
       errors: [],
     };
+  }
+
+  /**
+   * 테스트 및 디버깅용: artifact 로드
+   */
+  async loadArtifact(runId: string, artifactPath: string): Promise<string | null> {
+    return await loadArtifact(runId, artifactPath);
   }
 }
