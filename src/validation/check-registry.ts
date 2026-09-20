@@ -66,6 +66,16 @@ export const CHECK_REGISTRY: Record<string, CheckDefinition> = {
     cwd: process.cwd(),
     allowed_env_vars: ["PATH", "HOME", "TEMP", "NODE_PATH"],
   },
+
+  "test": {
+    id: "test",
+    command: "npm",
+    args: ["test"],
+    timeout_ms: 60000,
+    max_output_bytes: 1024 * 500, // 500KB
+    cwd: process.cwd(),
+    allowed_env_vars: ["PATH", "HOME", "TEMP", "NODE_PATH"],
+  },
 };
 
 /**
