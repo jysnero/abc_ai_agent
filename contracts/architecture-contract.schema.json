@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nh-ollone.internal/schemas/architecture-contract.schema.json",
+  "title": "Architecture Contract Schema",
+  "description": "Architect Agent가 생성 대상 WebView 서비스의 구조적 경계와 수정 허용 범위를 정의하는 기계 검증 가능한 계약. Execution Plan은 이 계약의 부분집합이어야 하며 모든 제약조건을 만족해야 한다.",
+  "version": "1.0.0",
+  "type": "object",
+
+  "required": [
+    "contract_id",
+    "version",
+    "pattern_type",
+    "issued_by",
+    "folder_structure",
+    "allowed_dependencies",
+    "bridge_contract_ref",
+    "bridge_policy",
+    "forbidden_patterns",
+    "design_tokens_ref"
+  ],
+
+  "properties": {
+    "contract_id": {
+      "type": "string",
+      "description": "요청 건별 고유 식별자. 형식: req-YYYY-MMDD-NNN-<service_type>",
+      "examples": ["req-2026-0920-001-minigame"]
+    },
+
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "계약 버전 (Semantic versioning)",
+      "examples": ["1.0.0"]
+    },
+
+    "pattern_type": {
+      "type": "string",
+      "description": "생성 대상이 기반할 템플릿 패턴. 기존 패턴이면 'minigame_shell_v1' 형식, 신규면 'custom:<설명>'",
+      "examples": ["minigame_shell_v1", "quiz_shell_v1", "custom:걷기형게임"]
+    },
+
+    "issued_by": {
+      "const": "architect_agent",
+      "type": "string",
+      "description": "계약 발급 주체 (현재 단계에서는 상수값)"
+    },
+
+    "folder_structure": {
+      "type": "object",
+      "description": "생성되는 WebView 서비스의 파일 구조 규칙. Execution Plan의 target_files는 이 범위의 부분집합이어야 함.",
+      "required": ["required_files", "allowed_globs"],
+      "additionalProperties": false,
+      "properties": {
+        "required_files": {
+          "type": "array",
+          "description": "반드시 존재해야 하는 파일 목록 (저장소 상대경로)",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            ["src/index.tsx", "src/pages/Game.tsx", "package.json", "tsconfig.json"]
+          ]
+        },
+
+        "allowed_globs": {
+          "type": "array",
+          "description": "생성 가능한 파일 경로 패턴 (glob). 이 패턴에 매치되지 않는 파일은 생성 금지. '../'와 절대경로는 금지됨.",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}", "public/**/*", "package.json", "tsconfig.json"]
+          ]
+        }
+      }
+    },
+
+    "allowed_dependencies": {
+      "type": "object",
+      "description": "외부 라이브러리 및 스크립트 호스트의 allowlist. Execution Plan의 dependencies는 이 범위의 부분집합이어야 함.",
+      "required": ["script_hosts", "npm_packages"],
+      "additionalProperties": false,
+      "properties": {
+        "script_hosts": {
+          "type": "array",
+          "description": "<script src>로 로드 가능한 CDN 호스트 allowlist (URI)",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          },
+          "examples": [
+            ["https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"]
+          ]
+        },
+
+        "npm_packages": {
+          "type": "array",
+          "description": "번들에 포함 가능한 npm 패키지 allowlist (버전 포함 권장)",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            ["react@^18.0.0", "react-dom@^18.0.0", "typescript@^5.0.0", "axios@^1.4.0"]
+          ]
+        }
+      }
+    },
+
+    "bridge_contract_ref": {
+      "type": "object",
+      "description": "외부에 정의된 Bridge 계약 파일 참조. 메서드 시그니처와 기본 스펙은 이 파일에서 정의됨. (예: minigame_shell_v1.json의 bridge_api_contract)",
+      "required": ["contract_id", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "contract_id": {
+          "type": "string",
+          "description": "외부 계약 식별자 (예: minigame_shell_v1)"
+        },
+        "path": {
+          "type": "string",
+          "description": "계약 파일 상대경로 (예: contracts/patterns/minigame_shell_v1.json). P0-3에서 존재 확인."
+        }
+      },
+      "examples": [
+        {
+          "contract_id": "minigame_shell_v1",
+          "path": "contracts/patterns/minigame_shell_v1.json"
+        }
+      ]
+    },
+
+    "bridge_policy": {
+      "type": "object",
+      "description": "이 요청에서 허용되는 Bridge 메서드와 호출 제약. 각 메서드는 최대 호출 횟수를 정의. Execution Plan의 bridge_usage는 이 한도의 부분집합이어야 함.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["max_calls_per_session"],
+        "additionalProperties": false,
+        "properties": {
+          "max_calls_per_session": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "세션당 최대 호출 횟수. execution_plan.bridge_usage가 이 한도 이내에서 실제 호출 개수를 결정."
+          },
+
+          "requires_approval": {
+            "type": "boolean",
+            "description": "이 메서드 사용 시 사람 승인 필요 여부 (선택). 결제, 보상 등 중요 작업에 사용."
+          }
+        }
+      },
+      "examples": [
+        {
+          "NHBridge.reward.grantPoint": {
+            "max_calls_per_session": 7,
+            "requires_approval": false
+          },
+          "NHBridge.ad.showRewarded": {
+            "max_calls_per_session": 5,
+            "requires_approval": false
+          },
+          "NHBridge.payment.charge": {
+            "max_calls_per_session": 1,
+            "requires_approval": true
+          }
+        }
+      ]
+    },
+
+    "forbidden_patterns": {
+      "type": "array",
+      "description": "생성 코드에서 금지되는 코딩 패턴. 각 항목의 regex는 P0-3에서 생성 파일 전체에 적용됨. Target file이 forbidden pattern과의 교집합이 공집합이어야 함.",
+      "items": {
+        "type": "object",
+        "required": ["id", "regex", "reason", "severity"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "패턴 고유 ID (P0-3 로그용)"
+          },
+
+          "regex": {
+            "type": "string",
+            "description": "금지할 코드 패턴 (정규표현식). P0-3에서 매치 여부를 검사함. 경고: regex 유효성은 P0-3에서 검증."
+          },
+
+          "reason": {
+            "type": "string",
+            "description": "패턴이 금지된 이유"
+          },
+
+          "severity": {
+            "type": "string",
+            "enum": ["block", "warn"],
+            "description": "block: 커밋 불가, warn: 경고만 출력"
+          }
+        }
+      },
+      "examples": [
+        [
+          {
+            "id": "no-eval",
+            "regex": "\\beval\\s*\\(",
+            "reason": "eval() is a security risk and violates Content Security Policy",
+            "severity": "block"
+          },
+          {
+            "id": "no-hardcoded-secret",
+            "regex": "api[_-]?key|secret|token.*=.*['\\\"]",
+            "reason": "Hardcoded credentials must not be committed",
+            "severity": "block"
+          },
+          {
+            "id": "no-direct-bridge-string",
+            "regex": "NHBridge\\.['\\\"]",
+            "reason": "Must use bridge adapter; do not reference bridge as string literal",
+            "severity": "block"
+          }
+        ]
+      ]
+    },
+
+    "design_tokens_ref": {
+      "type": "string",
+      "description": "디자인 시스템 토큰 문서 또는 파일의 저장소 상대경로. P0-3에서 파일 존재 여부를 검증. 절대경로와 '../'는 불가.",
+      "examples": ["design/tokens.json", "docs/design-system.md"]
+    }
+  },
+
+  "additionalProperties": false
+}

@@ -61,10 +61,18 @@
 
 ### 3. 아키텍처 검증은 필수
 
-`npm run check:arch`를 자주 실행하세요:
-- API 비용 **없음**
+**두 가지 검증 스크립트**:
+
+| 대상 | 명령어 | 용도 |
+|------|--------|------|
+| **Agent 구현** | `npm run check:arch -- contracts/patterns/minigame_shell_v1.json src/agents` | Agent 역할/기능 검증 |
+| **WebView 서비스** | `node scripts/check-architecture.mjs <contract-file>` | 구조/정책 검증 |
+
+**이점**:
+- API 비용 **없음** (로컬 검증)
 - 설계 오류를 초기에 감지
 - 다른 개발자와 공유 가능한 검증 결과
+- `execution_plan ⊆ architecture_contract` 관계 확인
 
 ---
 
@@ -76,9 +84,54 @@
 2. 새 기능 설계: `/blueprint` 스킬 사용
 3. 스펙 구체화: `/deep-dive` 스킬 사용
 4. 코드 작성: Claude Code 직접 사용
-5. 검증: `npm run check:arch` 실행
+5. **아키텍처 검증**: 다음 중 실행
+   - `npm run check:arch -- contracts/patterns/minigame_shell_v1.json src/agents` (Agent 구현 시)
+   - `node scripts/check-architecture.mjs <contract-file>` (WebView 서비스 검증 시)
 6. 최적화: `/autoresearch` 스킬 (선택)
 7. 마무리: `/reflect` 스킬로 학습 저장
+
+### Architecture Contract 워크플로우
+
+**생성 대상 WebView 서비스를 만들 때**:
+
+1. **계약 정의**: Architect Agent가 architecture-contract.json 발행
+   - 파일 구조 (required_files, allowed_globs)
+   - 의존성 (script_hosts, npm_packages)
+   - Bridge API 정책 (max_calls_per_session, requires_approval)
+   - 금지된 패턴 (regex 기반)
+
+2. **개발 계획**: Developer Agent가 execution-plan.json 생성
+   - `target_files ⊆ architecture_contract.allowed_globs`
+   - Bridge 호출 ≤ max_calls_per_session
+   - forbidden_patterns 미사용
+
+3. **자동 검증**: `node scripts/check-architecture.mjs <contract-file>`
+   - JSON Schema 검증
+   - 경로 구조 확인
+   - Bridge 정책 준수
+   - 금지 패턴 감지
+
+### 상태머신 (8-stage, v0.2+ 목표)
+
+```
+PLANNING (Planner Agent)
+    ↓
+DESIGN (Designer Agent)
+    ↓
+ARCH_CONTRACT (Architect Agent)
+    ↓
+HUMAN_GATE_SPEC (사람 승인)
+    ↓
+DEV_QA_LOOP (Developer + QA Agent, 최대 3회)
+    ↓
+HUMAN_GATE_RELEASE (사람 승인)
+    ↓
+DEVOPS (DevOps Agent)
+    ↓
+DONE / ESCALATED (종료 또는 에스컬레이션)
+```
+
+**v0.1 범위**: DEV_QA_LOOP (Developer Agent만 구현), 사람 승인 게이트 2곳
 
 ### 커밋 메시지 규칙
 
@@ -99,11 +152,16 @@ Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
 - **package.json** - npm 스크립트, 의존성
 - **.env.example** - 환경 변수 템플릿
 
+### 계약 및 검증
+- **contracts/patterns/minigame_shell_v1.json** - Agent 템플릿 계약 (⚠️ bridge_api_contract는 예시)
+- **contracts/architecture-contract.schema.json** - WebView 생성 서비스의 아키텍처 제약 정의
+- **contracts/examples/** - 정상/실패 예제 (valid-minigame, invalid-additional-properties, invalid-forbidden-path)
+- **scripts/check-arch.ts** - minigame_shell_v1 기반 검증 (기존)
+- **scripts/check-architecture.mjs** - architecture-contract 기반 검증 (P0-3 신규)
+
 ### 핵심 구현
-- **contracts/patterns/minigame_shell_v1.json** - Agent 계약서 스키마 + 예시 (⚠️ bridge_api_contract는 예시)
-- **scripts/check-arch.ts** - 아키텍처 검증 레이어
-- **src/orchestrator.ts** - Agent 오케스트레이터
-- **src/agents/developer.ts** - v0.1 구현 대상
+- **src/orchestrator.ts** - Agent 오케스트레이터 (8-stage 상태머신, P0-2 재설계)
+- **src/agents/developer.ts** - v0.1 구현 대상 (P0-2 재설계)
 
 ---
 
@@ -113,7 +171,10 @@ Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
 |------|------|--------|
 | "7개 Agent를 다 만들어야 해" | 조직도를 그대로 따름 | v0.1은 Developer만 + README 재확인 |
 | "bridge_api_contract를 테스트해야 해" | 예시를 진짜로 착각 | CLAUDE.md 1번 섹션 재읽음 + 스킵 |
-| "npm run check:arch에서 실패했어" | 설계 오류 | blueprint 재검토 + 수정 후 재실행 |
+| "check:arch에서 실패했어" (Agent) | 설계 오류 | blueprint 재검토 + 수정 후 재실행 |
+| "check-architecture.mjs에서 실패했어" (서비스) | 정책 위반 | contracts/examples 참고 + architecture-contract 재검토 |
+| "bridge_contract_ref가 뭐야?" | 새 필드 혼동 | CLAUDE.md의 "계약 및 검증" 섹션 참고 |
+| "execution_plan과 architecture_contract 차이?" | 범위 이해 부족 | `execution_plan ⊆ architecture_contract` 원칙 확인 |
 | "다른 Agent도 구현하면 어때?" | 동료 제안 | 이 파일의 v0.1 제약 설명 후 거절 |
 
 ---
@@ -124,8 +185,10 @@ Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
 - [ ] `ANTHROPIC_API_KEY` 입력
 - [ ] `npm install` 실행
 - [ ] `npm run check:arch -- contracts/patterns/minigame_shell_v1.json .` 성공 확인
+- [ ] `node scripts/check-architecture.mjs contracts/examples/valid-minigame-contract.json` 성공 확인
 - [ ] 이 파일(`CLAUDE.md`) 읽음
 - [ ] README.md의 "Bridge API Contract는 예시" 부분 다시 읽음
+- [ ] P0-1 (architecture-contract.schema.json)과 P0-3 (check-architecture.mjs) 문서 읽음
 
 ---
 
@@ -138,7 +201,21 @@ Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
 **A**: 네이티브 앱팀의 스펙 파일을 받으면 이 파일과 검증 스크립트를 함께 업데이트 (이 파일의 1번 섹션 참고)
 
 **Q**: "npm run check:arch가 실패했어"
-**A**: 검증 레이어가 설계 오류를 감지한 것 → CLAUDE.md 2번 섹션의 해결책 실행
+**A**: Agent 검증 실패 → CLAUDE.md 2번 섹션의 해결책 실행
+
+**Q**: "node scripts/check-architecture.mjs가 실패했어"
+**A**: WebView 서비스 정책 위반 → contracts/examples 참고 후 architecture-contract 재검토
+
+**Q**: "architecture-contract.schema.json과 minigame_shell_v1.json의 차이?"
+**A**: 
+- minigame_shell_v1.json: Agent 템플릿 정의 (메타데이터, 기능)
+- architecture-contract.schema.json: 생성 서비스의 구조 제약 (파일, 의존성, Bridge 정책)
+
+**Q**: "execution-plan이 뭐야?"
+**A**: architecture-contract의 부분집합. 이번 실행에서 실제로 수정할 파일과 작업을 정의하는 계획서. `execution_plan ⊆ architecture_contract` 원칙 준수 필수.
+
+**Q**: "requires_approval 플래그가 뭐야?"
+**A**: Bridge 메서드 사용 시 사람 승인이 필요하다는 뜻. 결제, 보상 등 중요 작업에 사용. P0-2 구현 시 고려할 사항.
 
 ---
 

@@ -8,14 +8,16 @@
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "check:arch": "tsx scripts/check-arch.ts",
-    "test": "node --test"
+    "test": "npm run build && node --test dist/tests/unit/orchestrator.test.js dist/tests/unit/plan-builder.test.js dist/tests/unit/run-storage.test.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
+    "@anthropic-ai/sdk": "^0.127.0",
+    "@types/node": "^20.10.0",
+    "minimatch": "^9.0.0",
     "tsx": "^4.7.0",
-    "@types/node": "^20.10.0"
+    "typescript": "^5.3.3"
   }
 }

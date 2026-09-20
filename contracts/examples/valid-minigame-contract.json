@@ -1,0 +1,84 @@
+{
+  "contract_id": "req-2026-0920-001-minigame",
+  "version": "1.0.0",
+  "pattern_type": "minigame_shell_v1",
+  "issued_by": "architect_agent",
+
+  "folder_structure": {
+    "required_files": [
+      "src/index.tsx",
+      "src/pages/Game.tsx",
+      "package.json",
+      "tsconfig.json"
+    ],
+    "allowed_globs": [
+      "src/**/*.{ts,tsx}",
+      "tests/**/*.{ts,tsx}",
+      "public/**/*",
+      "package.json",
+      "tsconfig.json"
+    ]
+  },
+
+  "allowed_dependencies": {
+    "script_hosts": [
+      "https://cdnjs.cloudflare.com",
+      "https://cdn.jsdelivr.net"
+    ],
+    "npm_packages": [
+      "react@^18.0.0",
+      "react-dom@^18.0.0",
+      "typescript@^5.0.0",
+      "axios@^1.4.0"
+    ]
+  },
+
+  "bridge_contract_ref": {
+    "contract_id": "minigame_shell_v1",
+    "path": "contracts/patterns/minigame_shell_v1.json"
+  },
+
+  "bridge_policy": {
+    "NHBridge.reward.grantPoint": {
+      "max_calls_per_session": 7,
+      "requires_approval": false
+    },
+    "NHBridge.ad.showRewarded": {
+      "max_calls_per_session": 5,
+      "requires_approval": false
+    },
+    "NHBridge.nav.close": {
+      "max_calls_per_session": 1,
+      "requires_approval": false
+    }
+  },
+
+  "forbidden_patterns": [
+    {
+      "id": "no-eval",
+      "regex": "\\beval\\s*\\(",
+      "reason": "eval() is a security risk and violates Content Security Policy",
+      "severity": "block"
+    },
+    {
+      "id": "no-hardcoded-secret",
+      "regex": "api[_-]?key|secret|token.*=.*['\\\"]",
+      "reason": "Hardcoded credentials must not be committed",
+      "severity": "block"
+    },
+    {
+      "id": "no-direct-bridge-string",
+      "regex": "NHBridge\\.['\\\"]",
+      "reason": "Must use bridge adapter; do not reference bridge as string literal",
+      "severity": "block"
+    },
+    {
+      "id": "no-inline-color",
+      "regex": "#[0-9a-fA-F]{3,8}|rgb\\s*\\(",
+      "reason": "Use design tokens instead of hardcoded colors",
+      "severity": "warn"
+    }
+  ],
+
+  "design_tokens_ref": "design/tokens.json"
+}

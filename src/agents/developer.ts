@@ -1,135 +1,277 @@
 /**
- * Developer Agent
+ * Developer Agent with Execution Plan
  *
- * v0.1 구현 대상: 코드 작성, 아키텍처 설계, 테스트 생성 등을 수행하는 Agent
+ * v0.1: execution-plan 기반 step-by-step 코드 생성
+ * - Step 1: 코드 생성 (target_files 목록 기반)
+ * - Step 2: 테스트 생성
+ * - Step 3: 자기 검증
+ * - Step 4: 최종 정리
  *
- * Status: 구현 준비 단계
+ * SDK 의존성 분리: Agent Client를 통한 통신
  */
 
-import Anthropic from "@anthropic-ai/claude-agent-sdk";
+import type { IAgentClient } from "../runtime/agent-client.js";
+import { createAgentClient } from "../runtime/agent-client.js";
+import type { ExecutionPlan } from "../orchestrator.js";
 
 export interface DeveloperAgentConfig {
   apiKey?: string;
   model?: string;
-  systemPrompt?: string;
+}
+
+export interface DeveloperAgentResult {
+  status: "success" | "failure";
+  generatedCode: Record<string, string>;
+  testCode: Record<string, string>;
+  selfValidation: Record<string, unknown>;
+  errors?: string[];
 }
 
 export class DeveloperAgent {
-  private client: InstanceType<typeof Anthropic>;
+  private client: IAgentClient;
   private model: string;
-  private systemPrompt: string;
 
   constructor(config: DeveloperAgentConfig = {}) {
-    this.client = new Anthropic({
-      apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY,
+    this.client = createAgentClient({
+      apiKey: config.apiKey,
+      timeout_ms: 60000,
+      max_retries: 3,
     });
-    this.model = config.model || "claude-3-5-sonnet-20241022";
-    this.systemPrompt =
-      config.systemPrompt ||
-      `You are a Developer Agent specialized in:
-- Code architecture and design
-- Implementation of features
-- Writing and improving tests
-- Code review and optimization
-
-When tasked with development work, provide clear, well-structured solutions.`;
+    this.model = config.model || "claude-opus-4-1";
   }
 
   /**
-   * Agent 초기화 및 준비 상태 확인
+   * Agent 초기화
    */
   async initialize(): Promise<void> {
     console.log("🔧 Developer Agent initializing...");
-    // 실제 초기화 로직 (필요시)
     console.log("✓ Developer Agent ready");
   }
 
   /**
-   * 개발 작업 실행
-   * @param task - 실행할 작업 설명
-   * @param context - 작업의 문맥 (코드, 요구사항 등)
+   * Execution Plan 기반 step-by-step 실행
+   * @param executionPlan - 수행할 작업 계획
+   * @param architectureContract - 구조 제약 (string으로 전달)
    */
-  async execute(task: string, context?: string): Promise<string> {
-    console.log(`📝 Developer Agent executing: ${task}`);
+  async executeByPlan(
+    executionPlan: ExecutionPlan,
+    architectureContract: string
+  ): Promise<DeveloperAgentResult> {
+    console.log(`📋 Developer Agent executing plan: ${executionPlan.contract_id}`);
 
-    const messages = [
-      {
-        role: "user" as const,
-        content: context
-          ? `${task}\n\nContext:\n${context}`
-          : task,
-      },
-    ];
+    const result: DeveloperAgentResult = {
+      status: "success",
+      generatedCode: {},
+      testCode: {},
+      selfValidation: {},
+    };
 
     try {
-      const response = await this.client.messages.create({
-        model: this.model,
-        max_tokens: 2048,
-        system: this.systemPrompt,
-        messages,
-      });
+      // Step 1: 코드 생성
+      console.log(`\n📝 Step 1: 코드 생성 (${executionPlan.target_files.length} 파일)`);
+      result.generatedCode = await this.generateCode(executionPlan, architectureContract);
 
-      const result = response.content
-        .filter((block) => block.type === "text")
-        .map((block) => (block.type === "text" ? block.text : ""))
-        .join("\n");
+      // Step 2: 테스트 생성
+      console.log(`\n🧪 Step 2: 테스트 생성`);
+      result.testCode = await this.generateTests(executionPlan, result.generatedCode);
 
+      // Step 3: 자기 검증
+      console.log(`\n✅ Step 3: 자기 검증`);
+      result.selfValidation = await this.selfValidate(executionPlan, result.generatedCode);
+
+      console.log(`✓ Developer Agent completed successfully`);
       return result;
     } catch (error) {
       console.error("❌ Developer Agent execution failed:", error);
-      throw error;
+      result.status = "failure";
+      result.errors = [String(error)];
+      return result;
     }
   }
 
   /**
-   * 코드 리뷰 수행
+   * Step 1: 코드 생성
+   */
+  private async generateCode(
+    plan: ExecutionPlan,
+    contractStr: string
+  ): Promise<Record<string, string>> {
+    const fileList = plan.target_files.join("\n");
+
+    const prompt = `
+You are a developer implementing a WebView service according to an execution plan.
+
+## Execution Plan
+- Contract ID: ${plan.contract_id}
+- Target Files: ${fileList}
+- Bridge Usage: ${JSON.stringify(plan.bridge_usage)}
+
+## Architecture Contract (constraints)
+${contractStr}
+
+## Task
+Generate complete, production-ready code for each target file. Follow the architecture contract constraints strictly.
+Output format: For each file, start with "### File: <path>" on a new line, then the code.
+`;
+
+    const response = await this.client.chat(
+      [{ role: "user", content: prompt }],
+      "You are a professional TypeScript developer."
+    );
+
+    const content = response.content;
+
+    // 파싱: "### File: <path>" 마크로부터 코드 추출
+    const codeMap: Record<string, string> = {};
+    const matches = content.split(/^### File: /m);
+
+    for (let i = 1; i < matches.length; i++) {
+      const lines = matches[i].split("\n");
+      const filePath = lines[0].trim();
+      const code = lines.slice(1).join("\n").trim();
+      codeMap[filePath] = code;
+    }
+
+    return codeMap;
+  }
+
+  /**
+   * Step 2: 테스트 생성
+   */
+  private async generateTests(
+    plan: ExecutionPlan,
+    generatedCode: Record<string, string>
+  ): Promise<Record<string, string>> {
+    const codeStr = Object.entries(generatedCode)
+      .map(([path, code]) => `File: ${path}\n${code}`)
+      .join("\n\n---\n\n");
+
+    const prompt = `
+You are writing tests for the generated code.
+
+## Generated Code
+${codeStr}
+
+## Task
+Write comprehensive test cases covering:
+1. Main functionality
+2. Error cases
+3. Edge cases
+
+Output format: For each test file, start with "### Test: <path>" on a new line, then the test code.
+Target files should be in tests/ directory with similar structure.
+`;
+
+    const response = await this.client.chat(
+      [{ role: "user", content: prompt }],
+      "You are an experienced QA engineer writing comprehensive tests."
+    );
+
+    const content = response.content;
+
+    const testMap: Record<string, string> = {};
+    const matches = content.split(/^### Test: /m);
+
+    for (let i = 1; i < matches.length; i++) {
+      const lines = matches[i].split("\n");
+      const filePath = lines[0].trim();
+      const code = lines.slice(1).join("\n").trim();
+      testMap[filePath] = code;
+    }
+
+    return testMap;
+  }
+
+  /**
+   * Step 3: 자기 검증
+   */
+  private async selfValidate(
+    plan: ExecutionPlan,
+    generatedCode: Record<string, string>
+  ): Promise<Record<string, unknown>> {
+    const codeStr = Object.entries(generatedCode)
+      .map(([path, code]) => `${path}: ${code.slice(0, 500)}...`) // 처음 500자만
+      .join("\n");
+
+    const prompt = `
+You are validating your generated code against an execution plan.
+
+## Execution Plan
+${JSON.stringify(plan, null, 2)}
+
+## Generated Code Summary
+${codeStr}
+
+## Task
+Check if the generated code completely implements the execution plan.
+Answer in JSON format:
+{
+  "completeness": "yes" | "no",
+  "coverage": ["list of covered target files"],
+  "missing": ["list of missing target files"],
+  "issues": ["list of any issues"],
+  "notes": "any additional notes"
+}
+`;
+
+    const response = await this.client.chat(
+      [{ role: "user", content: prompt }],
+      "You are a code quality reviewer verifying implementation completeness."
+    );
+
+    const content = response.content;
+
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // 파싱 실패 시 원본 텍스트 반환
+    }
+
+    return { raw: content };
+  }
+
+  /**
+   * 코드 리뷰 (v0.2+)
    */
   async reviewCode(code: string, guidelines?: string): Promise<string> {
-    const context = guidelines
-      ? `Review Guidelines:\n${guidelines}`
-      : undefined;
+    const prompt = `Review this code:\n\n\`\`\`\n${code}\n\`\`\`${
+      guidelines ? `\n\nGuidelines:\n${guidelines}` : ""
+    }`;
 
-    return this.execute(
-      `Please review the following code and provide suggestions for improvement:\n\n\`\`\`\n${code}\n\`\`\``,
-      context
+    const response = await this.client.chat(
+      [{ role: "user", content: prompt }],
+      "You are an experienced code reviewer."
     );
+
+    return response.content;
   }
 
   /**
-   * 테스트 생성
-   */
-  async generateTests(code: string, testFramework: string = "jest"): Promise<string> {
-    return this.execute(
-      `Generate comprehensive ${testFramework} tests for the following code:\n\n\`\`\`\n${code}\n\`\`\``,
-      `Use ${testFramework} as the test framework.`
-    );
-  }
-
-  /**
-   * 아키텍처 검토
+   * 아키텍처 검토 (v0.2+)
    */
   async reviewArchitecture(architectureDoc: string): Promise<string> {
-    return this.execute(
-      "Review the following architecture design and identify potential issues:\n\n" +
-        architectureDoc
+    const prompt = `Review this architecture design and identify issues:\n\n${architectureDoc}`;
+
+    const response = await this.client.chat(
+      [{ role: "user", content: prompt }],
+      "You are an experienced system architect."
     );
+
+    return response.content;
   }
 
   /**
-   * v0.1 상태 정보
+   * 상태 정보
    */
   getStatus(): Record<string, unknown> {
     return {
       agent: "Developer Agent",
       version: "0.1.0",
-      status: "ready",
       model: this.model,
-      capabilities: [
-        "code review",
-        "test generation",
-        "architecture review",
-        "feature implementation",
-      ],
+      capabilities: ["executeByPlan", "reviewCode", "reviewArchitecture"],
     };
   }
 }

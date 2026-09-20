@@ -1,0 +1,231 @@
+{
+  "baseline_metadata": {
+    "created_at": "2026-09-19T00:00:00Z",
+    "project_name": "NH 올원뱅크 WebView Agent Platform",
+    "project_phase": "Developer Agent v0.1 (Pre-P0 Integration)",
+    "recording_purpose": "Establish baseline state before P0-1 through P0-4 integration tasks"
+  },
+  "environment": {
+    "os": "Windows 10 Enterprise",
+    "os_build": "10.0.19045",
+    "os_type": "win32",
+    "shell": "PowerShell 5.1",
+    "node_version": "v20.10.0",
+    "npm_version": "10.2.3"
+  },
+  "git_state": {
+    "is_repository": true,
+    "current_branch": "master",
+    "head_commit": "76183d723b51bcd2047aeb1b2448ff27c8ed0fd2",
+    "head_subject": "Initial: AI Agent Platform v0.1 setup",
+    "staged_changes": 0,
+    "unstaged_changes": 0,
+    "untracked_files": 3,
+    "untracked_file_list": [
+      "blueprint-developer-agent.md",
+      "docs/",
+      "package-lock.json"
+    ]
+  },
+  "dependencies": {
+    "installed": true,
+    "node_modules_exists": true,
+    "packages": {
+      "@anthropic-ai/claude-agent-sdk": "0.3.278",
+      "@types/node": "20.19.43",
+      "tsx": "4.23.13",
+      "typescript": "5.9.3"
+    },
+    "total_packages": 4
+  },
+  "build": {
+    "command": "npm run build",
+    "tool": "tsc (TypeScript compiler)",
+    "status": "FAILED",
+    "exit_code": 2,
+    "duration_seconds": 6.86,
+    "errors": [
+      {
+        "code": "TS1192",
+        "message": "Module has no default export",
+        "file": "src/agents/developer.ts",
+        "line": 9,
+        "column": 8,
+        "category": "existing_code_defect",
+        "severity": "error",
+        "details": "SDK default export usage error (should use named export)"
+      },
+      {
+        "code": "TS7006",
+        "message": "Parameter 'block' implicitly has an 'any' type",
+        "file": "src/agents/developer.ts",
+        "line": 73,
+        "column": 15,
+        "category": "existing_code_defect",
+        "severity": "error",
+        "details": "Callback parameter type declaration missing (strict mode violation)"
+      },
+      {
+        "code": "TS7006",
+        "message": "Parameter 'block' implicitly has an 'any' type",
+        "file": "src/agents/developer.ts",
+        "line": 74,
+        "column": 15,
+        "category": "existing_code_defect",
+        "severity": "error",
+        "details": "Callback parameter type declaration missing (strict mode violation)"
+      }
+    ],
+    "error_count": 3,
+    "warning_count": 0
+  },
+  "type_check": {
+    "status": "BLOCKED",
+    "reason": "Build failed - TypeScript compilation blocked",
+    "exit_code": null,
+    "note": "tsc performs both compilation and type checking"
+  },
+  "lint": {
+    "status": "UNCHECKED",
+    "reason": "No lint script found in package.json",
+    "script_name": null,
+    "note": "May be configured in future"
+  },
+  "unit_tests": {
+    "command": "npm test",
+    "tool": "node --test (TAP framework)",
+    "status": "PASSED",
+    "exit_code": 0,
+    "duration_seconds": 4.93,
+    "tap_metrics": {
+      "total": 0,
+      "suites": 0,
+      "pass": 0,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "duration_ms": 42.5696
+    },
+    "assessment": "No tests executed (0 tests exist or recognized)"
+  },
+  "architecture_check": {
+    "command": "npm run check:arch",
+    "tool": "tsx scripts/check-arch.ts",
+    "status": "FAILED_USAGE",
+    "exit_code": 1,
+    "duration_seconds": 6.48,
+    "error": "Required arguments not provided",
+    "required_format": "npm run check:arch -- <schema-file> <target-folder>",
+    "example": "npm run check:arch -- contracts/patterns/minigame_shell_v1.json src/agents",
+    "note": "Script is designed as intended; exit code 1 is expected when CLI args missing"
+  },
+  "integration_tests": {
+    "status": "UNCHECKED",
+    "reason": "No E2E test script found in package.json"
+  },
+  "failure_classification": {
+    "summary": {
+      "existing_code_defect": 2,
+      "development_environment_issue": 0,
+      "test_configuration_issue": 0,
+      "command_not_found": 0,
+      "unknown_cause": 0
+    },
+    "details": [
+      {
+        "id": "TS1192",
+        "category": "existing_code_defect",
+        "affected_component": "src/agents/developer.ts",
+        "description": "SDK module import structure mismatch",
+        "root_cause": "Using default export when SDK provides named exports",
+        "resolution_scope": "P0-2 (orchestrator.ts refactor)",
+        "priority": "HIGH"
+      },
+      {
+        "id": "TS7006_line73_74",
+        "category": "existing_code_defect",
+        "affected_component": "src/agents/developer.ts",
+        "description": "Missing type annotations on callback parameters",
+        "root_cause": "strict mode enabled; callback params lack explicit typing",
+        "resolution_scope": "P0-2 (orchestrator.ts refactor)",
+        "priority": "HIGH"
+      }
+    ]
+  },
+  "execution_summary": {
+    "total_execution_time_seconds": 18.27,
+    "checks_performed": 7,
+    "checks_passed": 2,
+    "checks_failed": 2,
+    "checks_unchecked": 3,
+    "timeline": [
+      {
+        "step": "Build (tsc)",
+        "duration_seconds": 6.86,
+        "status": "FAILED"
+      },
+      {
+        "step": "Unit Tests (npm test)",
+        "duration_seconds": 4.93,
+        "status": "PASSED"
+      },
+      {
+        "step": "Architecture Check (check-arch)",
+        "duration_seconds": 6.48,
+        "status": "FAILED_USAGE"
+      }
+    ]
+  },
+  "health_assessment": {
+    "overall_status": "PARTIAL_OPERATIONAL",
+    "git_status": "HEALTHY",
+    "dependencies_status": "HEALTHY",
+    "build_status": "FAILED",
+    "test_status": "INCOMPLETE",
+    "architecture_check_status": "DESIGN_PHASE",
+    "recommendation": "Proceed with P0 integration; P0-2 will address build issues"
+  },
+  "p0_readiness": {
+    "can_proceed_with_p0": true,
+    "p0_tasks_feasible": {
+      "p0_1_architecture_contract_schema": {
+        "feasible": true,
+        "depends_on_current_state": false,
+        "note": "New file, no dependencies"
+      },
+      "p0_3_check_architecture_mjs": {
+        "feasible": true,
+        "depends_on_current_state": false,
+        "note": "Script migration, no dependencies"
+      },
+      "p0_4_claude_md": {
+        "feasible": true,
+        "depends_on_current_state": false,
+        "note": "Documentation update, no dependencies"
+      },
+      "p0_2_orchestrator_ts": {
+        "feasible": true,
+        "depends_on_current_state": false,
+        "note": "Will fix current build issues"
+      }
+    },
+    "regression_check_baseline": {
+      "build_should_reach": "exit_code: 0, error_count: 0",
+      "tests_should_reach": "equal or more tests than 0",
+      "arch_check_should_support": "CLI arguments handling"
+    }
+  },
+  "notes": {
+    "critical_observations": [
+      "TypeScript build is blocking; this is expected to be resolved by P0-2 (orchestrator redesign)",
+      "Zero tests in baseline; any P0 work adding tests should be clearly marked as new",
+      "Architecture check CLI design is intentional (requires explicit schema/target); P0-3 will enhance this"
+    ],
+    "for_next_session": [
+      "After each P0 task, compare build status against this baseline",
+      "Monitor TS1192 and TS7006 errors specifically - they should disappear after P0-2",
+      "If new TS errors appear during P0 work, classify as regression"
+    ]
+  }
+}

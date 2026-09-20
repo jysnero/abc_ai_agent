@@ -1,0 +1,34 @@
+{
+  "contract_id": "req-2026-0920-002-invalid",
+  "version": "1.0.0",
+  "pattern_type": "minigame_shell_v1",
+  "issued_by": "architect_agent",
+
+  "folder_structure": {
+    "required_files": ["src/index.tsx"],
+    "allowed_globs": ["src/**/*.tsx"]
+  },
+
+  "allowed_dependencies": {
+    "script_hosts": ["https://cdnjs.cloudflare.com"],
+    "npm_packages": ["react@^18.0.0"]
+  },
+
+  "bridge_contract_ref": {
+    "contract_id": "minigame_shell_v1",
+    "path": "contracts/patterns/minigame_shell_v1.json"
+  },
+
+  "bridge_policy": {
+    "NHBridge.reward.grantPoint": {
+      "max_calls_per_session": 7
+    }
+  },
+
+  "forbidden_patterns": [],
+
+  "design_tokens_ref": "design/tokens.json",
+
+  "custom_field_not_allowed": "This field violates additionalProperties: false",
+  "another_invalid_field": true
+}
