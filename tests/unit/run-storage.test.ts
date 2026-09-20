@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import fs from "fs";
 import path from "path";
+import { createHash } from "crypto";
 import {
   initializeRun,
   loadManifest,
@@ -92,7 +93,8 @@ test("Run Storage: loadArtifact retrieves saved content", async () => {
 
 test("Run Storage: transitionState records state change and validates approvals", async () => {
   await cleanup();
-  await initializeRun(TEST_RUN_ID, JSON.stringify({ test: true }));
+  const requestSpec = JSON.stringify({ test: true });
+  await initializeRun(TEST_RUN_ID, requestSpec);
 
   // Valid transition: PLANNING → DESIGN
   const manifest1 = await transitionState(TEST_RUN_ID, "DESIGN");
@@ -102,9 +104,13 @@ test("Run Storage: transitionState records state change and validates approvals"
   // Continue to ARCH_CONTRACT
   await transitionState(TEST_RUN_ID, "ARCH_CONTRACT");
 
-  // Record SPEC approval
+  // Load actual checksum from manifest (set by initializeRun -> saveArtifact)
+  const manifest = await loadManifest(TEST_RUN_ID);
+  const requestSpecChecksum = manifest.request_spec_revision!;
+
+  // Record SPEC approval with actual checksums
   await recordSpecApproval(TEST_RUN_ID, "test-approver", {
-    request_spec: "sha256:abc",
+    request_spec: requestSpecChecksum,
     architecture_contract: "sha256:def",
     execution_plan: "sha256:ghi",
   });
@@ -153,6 +159,84 @@ test("Run Storage: detects and prevents path traversal in artifact save", async 
   } catch (error) {
     // Expected for path traversal attempts
   }
+
+  await cleanup();
+});
+
+test("Run Storage: request-spec checksum validates against actual file bytes", async () => {
+  await cleanup();
+  const requestSpec = JSON.stringify({ test: true, timestamp: "2026-09-20" });
+  await initializeRun(TEST_RUN_ID, requestSpec);
+
+  // Load manifest to get recorded checksum
+  const manifest = await loadManifest(TEST_RUN_ID);
+  assert(manifest.request_spec_revision, "Manifest should have request_spec_revision");
+
+  // Load actual file and calculate SHA-256
+  const filePath = path.resolve(".blueprint/runs", TEST_RUN_ID, "request-spec.v1.json");
+  assert(fs.existsSync(filePath), "request-spec.v1.json should exist");
+
+  const fileContent = fs.readFileSync(filePath, "utf-8");
+  const actualChecksum = `sha256:${createHash("sha256").update(fileContent).digest("hex").slice(0, 16)}`;
+
+  // Verify manifest checksum matches actual file
+  assert.strictEqual(
+    manifest.request_spec_revision,
+    actualChecksum,
+    "Manifest checksum should match actual file bytes"
+  );
+
+  await cleanup();
+});
+
+test("Run Storage: Scenario D regression - request-spec.v1.json exists after initializeRun", async () => {
+  await cleanup();
+  const requestSpec = JSON.stringify({ scenario: "d", service: "test" });
+  await initializeRun(TEST_RUN_ID, requestSpec);
+
+  // Verify file exists at correct path (v1.json, not .json)
+  const correctPath = path.resolve(".blueprint/runs", TEST_RUN_ID, "request-spec.v1.json");
+  const wrongPath = path.resolve(".blueprint/runs", TEST_RUN_ID, "request-spec.json");
+
+  assert(fs.existsSync(correctPath), "request-spec.v1.json should exist");
+  assert(!fs.existsSync(wrongPath), "request-spec.json should NOT exist (old format)");
+
+  // Verify content matches
+  const stored = fs.readFileSync(correctPath, "utf-8");
+  assert.strictEqual(stored, requestSpec, "Stored content should match input");
+
+  // Verify loadArtifact can retrieve it
+  const loaded = await loadArtifact(TEST_RUN_ID, "request-spec");
+  assert.strictEqual(loaded, requestSpec, "loadArtifact should retrieve request-spec.v1.json");
+
+  await cleanup();
+});
+
+test("Run Storage: wrong checksum in approval blocks validation", async () => {
+  await cleanup();
+  const requestSpec = JSON.stringify({ test: true });
+  await initializeRun(TEST_RUN_ID, requestSpec);
+
+  const manifest = await loadManifest(TEST_RUN_ID);
+  const actualChecksum = manifest.request_spec_revision!;
+
+  await transitionState(TEST_RUN_ID, "DESIGN");
+  await transitionState(TEST_RUN_ID, "ARCH_CONTRACT");
+  await transitionState(TEST_RUN_ID, "PLAN_BUILD");
+  await transitionState(TEST_RUN_ID, "HUMAN_GATE_SPEC");
+
+  // Record approval with WRONG checksum
+  await recordSpecApproval(TEST_RUN_ID, "test-approver", {
+    request_spec: "sha256:wrongchecksum",
+    architecture_contract: "sha256:def",
+    execution_plan: "sha256:ghi",
+  });
+
+  // Transition to DEV_VALIDATION_LOOP should invalidate approval due to checksum mismatch
+  // (checksum validation happens only at DEV_VALIDATION_LOOP transition)
+  const manifestAfter = await transitionState(TEST_RUN_ID, "DEV_VALIDATION_LOOP");
+
+  assert(!manifestAfter.spec_approval, "Spec approval should be invalidated due to checksum mismatch");
 
   await cleanup();
 });

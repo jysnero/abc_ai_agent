@@ -25,6 +25,10 @@ export class FakeAgentClient implements IAgentClient {
     this.scenario = scenario;
   }
 
+  getCallCount(): number {
+    return this.callCount;
+  }
+
   async chat(
     messages: AgentMessage[],
     systemPrompt?: string

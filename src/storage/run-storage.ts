@@ -118,15 +118,16 @@ export async function initializeRun(
   // 디렉토리 생성
   fs.mkdirSync(runDir, { recursive: true });
 
-  // Request spec 저장
-  const specChecksum = calculateChecksum(requestSpec);
-  await atomicWrite(securePath(runId, "request-spec.json"), requestSpec);
-  metadata.request_spec_revision = specChecksum;
-
   // Manifest 저장
   await atomicWrite(manifestPath, JSON.stringify(metadata, null, 2));
 
-  return metadata;
+  // Request spec 저장 (saveArtifact가 manifest를 로드하고 업데이트)
+  // TODO(v0.2): Add transaction/rollback support if saveArtifact fails to prevent
+  // orphaned manifest files. Currently relies on saveArtifact being atomic.
+  await saveArtifact(runId, "request-spec", requestSpec);
+
+  // 업데이트된 manifest 반환
+  return await loadManifest(runId);
 }
 
 /**
