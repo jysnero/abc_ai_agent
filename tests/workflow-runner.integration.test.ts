@@ -193,22 +193,51 @@ describe("Workflow Runner Integration Tests (with FakeValidationRunner)", () => 
       assert.ok(status.artifacts.architectureContract);
       assert.ok(status.artifacts.executionPlan);
 
-      await runner.resumeAfterSpecApproval(runId, { approver: "architect" });
+      // Capture resumeAfterSpecApproval execution details
+      let resumeResolved = false;
+      let resumeError: Error | undefined;
+
+      try {
+        await runner.resumeAfterSpecApproval(runId, { approver: "architect" });
+        resumeResolved = true;
+      } catch (error) {
+        resumeError = error as Error;
+        // Output exception details to stderr for debugging
+        process.stderr.write(
+          "=== SCENARIO D: resumeAfterSpecApproval EXCEPTION ===\n" +
+          JSON.stringify(
+            {
+              type: error instanceof Error ? error.constructor.name : typeof error,
+              message: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+            },
+            null,
+            2
+          ) +
+          "\n"
+        );
+      }
 
       status = await runner.getRunStatus(runId);
 
-      // Both artifacts should now exist
-      if (!status.artifacts.developerResult || !status.artifacts.validationReport) {
-        // Debug: list actual files created
-        const testRunDir = process.env.TEST_RUN_DIR;
-        const runDir = path.join(testRunDir || ".blueprint/runs", runId);
-        try {
-          const files = await fs.readdir(runDir, { recursive: true });
-          assert.fail(`Missing artifacts. Files: ${JSON.stringify(files.sort())}`);
-        } catch {
-          assert.fail(`Run directory not found at ${runDir}`);
-        }
-      }
+      // Debug: Log actual artifact state
+      process.stderr.write(
+        "=== SCENARIO D: POST-RESUME STATUS ===\n" +
+        JSON.stringify(
+          {
+            resumeResolved,
+            resumeError: resumeError ? resumeError.message : null,
+            status: status.status,
+            artifacts: {
+              developerResult: status.artifacts.developerResult ? "✓" : "✗",
+              validationReport: status.artifacts.validationReport ? "✓" : "✗",
+            },
+          },
+          null,
+          2
+        ) +
+        "\n"
+      );
 
       assert.ok(status.artifacts.developerResult);
       assert.ok(status.artifacts.validationReport);

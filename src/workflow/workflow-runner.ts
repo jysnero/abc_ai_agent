@@ -113,21 +113,34 @@ export class WorkflowRunner {
    * Spec 승인 후 재개
    */
   async resumeAfterSpecApproval(runId: string, approval: WorkflowApproval): Promise<void> {
+    console.log(`[WorkflowRunner] resumeAfterSpecApproval START for ${runId}`);
+
     // 승인 기록
     const contractArtifact = await loadArtifact(runId, "architecture-contract");
     const planArtifact = await loadArtifact(runId, "execution-plan");
     const specArtifact = await loadArtifact(runId, "request-spec");
+    console.log(`[WorkflowRunner] artifacts loaded: contract=${!!contractArtifact}, plan=${!!planArtifact}, spec=${!!specArtifact}`);
 
     await recordSpecApproval(runId, approval.approver, {
       request_spec: calculateChecksum(specArtifact || ""),
       architecture_contract: calculateChecksum(contractArtifact || ""),
       execution_plan: calculateChecksum(planArtifact || ""),
     });
+    console.log(`[WorkflowRunner] spec approval recorded`);
 
     // DEV_VALIDATION_LOOP 시작
-    await transitionState(runId, "DEV_VALIDATION_LOOP");
+    try {
+      await transitionState(runId, "DEV_VALIDATION_LOOP");
+      console.log(`[WorkflowRunner] transitioned to DEV_VALIDATION_LOOP`);
+    } catch (err) {
+      const manifest = await loadManifest(runId);
+      const errMsg = `transitionState(DEV_VALIDATION_LOOP) failed: ${(err as Error).message}. Manifest spec_approval: ${JSON.stringify(manifest.spec_approval)}`;
+      console.log(`[WorkflowRunner] ERROR: ${errMsg}`);
+      throw new Error(errMsg);
+    }
 
     // Developer Agent 실행
+    console.log(`[WorkflowRunner] about to call developerAgent.executeByPlan`);
     const executionPlan = JSON.parse(planArtifact || "{}");
 
     const devResult = await this.developerAgent.executeByPlan(executionPlan, contractArtifact || "");
