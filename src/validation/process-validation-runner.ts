@@ -80,9 +80,16 @@ export async function validateWorkspacePath(
  */
 export class ProcessValidationRunner implements IValidationRunner {
   private baseRoot: string;
+  private checkDefinitionOverrides: Map<string, Partial<CheckDefinition>>;
 
-  constructor(baseRoot: string = process.cwd()) {
+  constructor(
+    baseRoot: string = process.cwd(),
+    checkDefinitionOverrides?: Record<string, Partial<CheckDefinition>>
+  ) {
     this.baseRoot = baseRoot;
+    this.checkDefinitionOverrides = new Map(
+      checkDefinitionOverrides ? Object.entries(checkDefinitionOverrides) : []
+    );
   }
 
   async runCheck(
@@ -93,7 +100,7 @@ export class ProcessValidationRunner implements IValidationRunner {
     const startedAt = new Date().toISOString();
 
     // Check 정의 조회
-    const checkDef = getCheckDefinition(checkId);
+    let checkDef = getCheckDefinition(checkId);
     if (!checkDef) {
       return {
         check_id: checkId,
@@ -105,6 +112,12 @@ export class ProcessValidationRunner implements IValidationRunner {
         started_at: startedAt,
         finished_at: new Date().toISOString(),
       };
+    }
+
+    // Override 적용
+    const override = this.checkDefinitionOverrides.get(checkId);
+    if (override) {
+      checkDef = { ...checkDef, ...override };
     }
 
     try {
@@ -154,6 +167,11 @@ export class ProcessValidationRunner implements IValidationRunner {
         artifact_checksum: artifactChecksum,
         started_at: startedAt,
         finished_at: new Date().toISOString(),
+        timedOut: result.timedOut,
+        errorCode: result.errorCode,
+        timeoutMs: result.timeoutMs,
+        terminationMethod: result.terminationMethod,
+        processTreeTerminationSucceeded: result.processTreeTerminationSucceeded,
       };
     } catch (error: unknown) {
       const err = error as Error;
@@ -207,11 +225,13 @@ export class ProcessValidationRunner implements IValidationRunner {
     // 결과 요약
     const passedCount = results.filter((r) => r.status === "passed").length;
     const failedCount = results.filter((r) => r.status === "failed").length;
+    const timedOutCount = results.filter((r) => r.status === "timed_out").length;
 
     return {
       total_checks: checkIds.length,
       passed_checks: passedCount,
       failed_checks: failedCount,
+      timed_out_checks: timedOutCount > 0 ? timedOutCount : undefined,
       skipped_checks: 0,
       checks: results,
       generated_at: new Date().toISOString(),
@@ -227,10 +247,15 @@ export class ProcessValidationRunner implements IValidationRunner {
     maxOutputBytes: number,
     checkDef: CheckDefinition
   ): Promise<{
-    status: "passed" | "failed" | "error";
+    status: "passed" | "failed" | "timed_out" | "error";
     exit_code?: number;
     stdout: string;
     stderr: string;
+    timedOut?: boolean;
+    errorCode?: string;
+    timeoutMs?: number;
+    terminationMethod?: string;
+    processTreeTerminationSucceeded?: boolean;
   }> {
     return new Promise((resolve, reject) => {
       let stdoutData = "";
@@ -271,6 +296,9 @@ export class ProcessValidationRunner implements IValidationRunner {
       }
 
       // Timeout 처리
+      let processTreeTerminationSucceeded = false;
+      let terminationMethod = "none";
+
       const timeoutHandle = setTimeout(() => {
         timedOut = true;
 
@@ -280,21 +308,28 @@ export class ProcessValidationRunner implements IValidationRunner {
             spawn("taskkill", ["/PID", childPid.toString(), "/T", "/F"], {
               stdio: "ignore",
             });
+            terminationMethod = "taskkill";
+            processTreeTerminationSucceeded = true;
           } catch (e) {
             // taskkill 실패 시 SIGKILL 폴백
             try {
               child.kill("SIGKILL");
+              terminationMethod = "SIGKILL";
+              processTreeTerminationSucceeded = true;
             } catch (e2) {
               // ignore
             }
           }
         } else {
           child.kill("SIGTERM");
+          terminationMethod = "SIGTERM";
 
           // 강제 종료 폴백 (일부 프로세스는 SIGTERM을 무시할 수 있음)
           setTimeout(() => {
             try {
               child.kill("SIGKILL");
+              terminationMethod = "SIGKILL";
+              processTreeTerminationSucceeded = true;
             } catch (e) {
               // ignore
             }
@@ -322,10 +357,15 @@ export class ProcessValidationRunner implements IValidationRunner {
 
         if (timedOut) {
           resolve({
-            status: "error",
+            status: "timed_out",
             exit_code: code ?? undefined,
             stdout: maskedStdout.slice(0, 500),
-            stderr: `Process timeout after ${timeoutMs}ms (signal: ${signal})`,
+            stderr: `Process timeout after ${timeoutMs}ms`,
+            timedOut: true,
+            errorCode: "PROCESS_TIMEOUT",
+            timeoutMs,
+            terminationMethod,
+            processTreeTerminationSucceeded,
           });
         } else if (code === 0) {
           resolve({

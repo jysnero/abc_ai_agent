@@ -7,7 +7,7 @@
 
 export interface ValidationCheckResult {
   check_id: string;
-  status: "passed" | "failed" | "skipped" | "error";
+  status: "passed" | "failed" | "timed_out" | "skipped" | "error";
   exit_code?: number;
   duration_ms: number;
   stdout_summary: string;
@@ -15,12 +15,18 @@ export interface ValidationCheckResult {
   artifact_checksum?: string;
   started_at: string;
   finished_at: string;
+  timedOut?: boolean;
+  errorCode?: string;
+  timeoutMs?: number;
+  terminationMethod?: string;
+  processTreeTerminationSucceeded?: boolean;
 }
 
 export interface ValidationReport {
   total_checks: number;
   passed_checks: number;
   failed_checks: number;
+  timed_out_checks?: number;
   skipped_checks: number;
   checks: ValidationCheckResult[];
   generated_at: string;

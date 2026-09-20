@@ -71,7 +71,7 @@ export const CHECK_REGISTRY: Record<string, CheckDefinition> = {
     id: "test",
     command: "npm",
     args: ["test"],
-    timeout_ms: 60000,
+    timeout_ms: 60000, // 타임아웃 테스트 중 override됨 (통합 테스트에서 1s로 설정)
     max_output_bytes: 1024 * 500, // 500KB
     cwd: process.cwd(),
     allowed_env_vars: ["PATH", "TEMP"],

@@ -152,28 +152,50 @@ describe("ProcessValidationRunner Integration Tests", () => {
       // File doesn't exist, that's fine
     }
 
-    const runner = new ProcessValidationRunner(timeoutDir);
+    // Use short timeout for test (normally 60s, here 1s)
+    const runner = new ProcessValidationRunner(timeoutDir, {
+      test: { timeout_ms: 1000 },
+    });
 
-    // Run test check with 5 second timeout (short enough to trigger)
+    // Run test check with short timeout (1s from check-registry)
     // The timeout-workspace test hangs indefinitely
     const result = await runner.runCheck("test");
 
-    // Should timeout
+    // Should timeout with structured status
     assert.strictEqual(
       result.status,
-      "error",
-      `Expected timeout error, got: ${result.status}`
+      "timed_out",
+      `Expected timed_out status, got: ${result.status}`
+    );
+    assert.strictEqual(
+      result.errorCode,
+      "PROCESS_TIMEOUT",
+      `Expected PROCESS_TIMEOUT errorCode, got: ${result.errorCode}`
+    );
+    assert.strictEqual(
+      result.timedOut,
+      true,
+      "Expected timedOut flag to be true"
+    );
+    assert.strictEqual(
+      result.timeoutMs,
+      1000,
+      `Expected 1000ms timeout, got: ${result.timeoutMs}`
     );
     assert(
-      result.stderr_summary.includes("timeout") ||
-      result.stderr_summary.includes("Timeout"),
-      `Expected timeout message, got: ${result.stderr_summary}`
+      result.terminationMethod,
+      "Expected terminationMethod to be set"
+    );
+    assert.strictEqual(
+      result.processTreeTerminationSucceeded,
+      true,
+      "Expected processTreeTerminationSucceeded to be true"
     );
 
-    // Wait a bit to ensure child process would have created marker file
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait a bit to ensure child process would have created marker file if it continued
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Marker file should NOT exist because process was killed
+    // Marker file should NOT exist because process was killed before completion
     let markerExists = false;
     try {
       await fs.stat(markerFile);
@@ -184,7 +206,7 @@ describe("ProcessValidationRunner Integration Tests", () => {
 
     assert(
       !markerExists,
-      "Marker file should not exist (process should be terminated)"
+      "Marker file should not exist (process terminated by timeout)"
     );
   });
 
