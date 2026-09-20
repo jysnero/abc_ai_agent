@@ -240,3 +240,26 @@ test("Run Storage: wrong checksum in approval blocks validation", async () => {
 
   await cleanup();
 });
+
+test("Run Storage: initializeRun creates complete run directory (request-spec + manifest)", async () => {
+  await cleanup();
+  const requestSpec = JSON.stringify({ test: true });
+  await initializeRun(TEST_RUN_ID, requestSpec);
+
+  const runDir = path.resolve(".blueprint/runs", TEST_RUN_ID);
+  const manifestPath = path.join(runDir, "manifest.json");
+  const requestSpecPath = path.join(runDir, "request-spec.v1.json");
+
+  assert(fs.existsSync(manifestPath), "manifest.json should exist");
+  assert(fs.existsSync(requestSpecPath), "request-spec.v1.json should exist");
+
+  // Verify manifest has checksum recorded
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+  assert(manifest.request_spec_revision, "Manifest should have request_spec_revision");
+
+  // Verify both files can be loaded
+  const loadedSpec = await loadArtifact(TEST_RUN_ID, "request-spec");
+  assert.strictEqual(loadedSpec, requestSpec, "Should load request-spec successfully");
+
+  await cleanup();
+});

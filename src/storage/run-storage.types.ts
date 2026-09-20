@@ -11,7 +11,10 @@ export interface RunMetadata {
   status: "PLANNING" | "DESIGN" | "ARCH_CONTRACT" | "PLAN_BUILD" | "HUMAN_GATE_SPEC" | "DEV_VALIDATION_LOOP" | "HUMAN_GATE_RELEASE" | "DEVOPS" | "DONE" | "ESCALATED" | "PLAN_CHANGE_REQUIRED" | "NEEDS_HUMAN_REVIEW";
 
   // Artifact revisions (immutable)
-  request_spec_revision?: string;      // checksum
+  // v0.1: stores SHA-256 checksum (first 16 chars) as string
+  // v0.2+: should refactor to { revision: number; path: string; checksum: string }
+  // See ArtifactRevision type below for planned structure
+  request_spec_revision?: string;      // SHA-256 checksum (v0.1)
   architecture_contract_revision?: string;
   execution_plan_revision?: string;
   developer_result_revision?: string;
