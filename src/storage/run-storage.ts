@@ -104,6 +104,7 @@ export async function initializeRun(
     created_at: now,
     updated_at: now,
     status: "PLANNING",
+    initialization_status: "INITIALIZING",
     retry_count: { arch: 0, dev_repair: 0 },
     events: [
       {
@@ -118,13 +119,28 @@ export async function initializeRun(
   // 디렉토리 생성
   fs.mkdirSync(runDir, { recursive: true });
 
-  // Manifest 저장
+  // Manifest 저장 (INITIALIZING 상태)
   await atomicWrite(manifestPath, JSON.stringify(metadata, null, 2));
 
   // Request spec 저장 (saveArtifact가 manifest를 로드하고 업데이트)
   // TODO(v0.2): Add transaction/rollback support if saveArtifact fails to prevent
-  // orphaned manifest files. Currently relies on saveArtifact being atomic.
-  await saveArtifact(runId, "request-spec", requestSpec);
+  // orphaned manifest files. Currently saveArtifact is atomic per-file, but not across artifacts.
+  try {
+    await saveArtifact(runId, "request-spec", requestSpec);
+  } catch (error) {
+    // Mark initialization as failed
+    const failedManifest = await loadManifest(runId);
+    failedManifest.initialization_status = "FAILED";
+    failedManifest.updated_at = new Date().toISOString();
+    await atomicWrite(manifestPath, JSON.stringify(failedManifest, null, 2));
+    throw error;
+  }
+
+  // 초기화 완료: READY 상태로 변경
+  const readyManifest = await loadManifest(runId);
+  readyManifest.initialization_status = "READY";
+  readyManifest.updated_at = new Date().toISOString();
+  await atomicWrite(manifestPath, JSON.stringify(readyManifest, null, 2));
 
   // 업데이트된 manifest 반환
   return await loadManifest(runId);

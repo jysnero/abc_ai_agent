@@ -115,6 +115,15 @@ export class WorkflowRunner {
   async resumeAfterSpecApproval(runId: string, approval: WorkflowApproval): Promise<void> {
     console.log(`[WorkflowRunner] resumeAfterSpecApproval START for ${runId}`);
 
+    // Run 초기화 상태 검증
+    const manifest = await loadManifest(runId);
+    if (manifest.initialization_status !== "READY") {
+      throw new Error(
+        `Cannot resume run in ${manifest.initialization_status || "unknown"} initialization state. ` +
+        `Run must be READY to execute.`
+      );
+    }
+
     // 승인 기록
     const contractArtifact = await loadArtifact(runId, "architecture-contract");
     const planArtifact = await loadArtifact(runId, "execution-plan");

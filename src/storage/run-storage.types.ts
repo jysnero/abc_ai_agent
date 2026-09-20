@@ -10,6 +10,11 @@ export interface RunMetadata {
   updated_at: string;
   status: "PLANNING" | "DESIGN" | "ARCH_CONTRACT" | "PLAN_BUILD" | "HUMAN_GATE_SPEC" | "DEV_VALIDATION_LOOP" | "HUMAN_GATE_RELEASE" | "DEVOPS" | "DONE" | "ESCALATED" | "PLAN_CHANGE_REQUIRED" | "NEEDS_HUMAN_REVIEW";
 
+  // Initialization lifecycle (v0.1+)
+  // INITIALIZING → READY (success) or FAILED (partial init)
+  // Workflow Runner must check status === "READY" before execution
+  initialization_status?: "INITIALIZING" | "READY" | "FAILED";
+
   // Artifact revisions (immutable)
   // v0.1: stores SHA-256 checksum (first 16 chars) as string
   // v0.2+: should refactor to { revision: number; path: string; checksum: string }
