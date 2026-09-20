@@ -1,0 +1,38 @@
+{
+  "run_id": "req-20260920-001-integration-test",
+  "created_at": "2026-09-20T05:24:19.160Z",
+  "updated_at": "2026-09-20T05:24:19.181Z",
+  "status": "PLAN_BUILD",
+  "retry_count": {
+    "arch": 0,
+    "dev_repair": 0
+  },
+  "events": [
+    {
+      "timestamp": "2026-09-20T05:24:19.160Z",
+      "from_state": "INITIAL",
+      "to_state": "PLANNING",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-20T05:24:19.174Z",
+      "from_state": "PLANNING",
+      "to_state": "DESIGN",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-20T05:24:19.178Z",
+      "from_state": "DESIGN",
+      "to_state": "ARCH_CONTRACT",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-20T05:24:19.181Z",
+      "from_state": "ARCH_CONTRACT",
+      "to_state": "PLAN_BUILD",
+      "triggered_by": "system"
+    }
+  ],
+  "request_spec_revision": "sha256:8d71854ee01631ad",
+  "architecture_contract_revision": "sha256:f4df3e7cdc8e76cc"
+}

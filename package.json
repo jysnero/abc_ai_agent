@@ -8,7 +8,8 @@
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "check:arch": "tsx scripts/check-arch.ts",
-    "test": "npm run build && node --test dist/tests/unit/orchestrator.test.js dist/tests/unit/plan-builder.test.js dist/tests/unit/run-storage.test.js"
+    "test": "npm run build && node --test dist/tests/unit/orchestrator.test.js dist/tests/unit/plan-builder.test.js dist/tests/unit/run-storage.test.js",
+    "test:integration": "npm run build && node --test dist/tests/unit/orchestrator.test.js dist/tests/unit/plan-builder.test.js dist/tests/unit/run-storage.test.js dist/tests/workflow-runner.integration.test.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest"

@@ -20,7 +20,13 @@ import { createHash } from "crypto";
 import { RunMetadata, StateTransitionEvent } from "./run-storage.types.js";
 
 const RUN_ID_PATTERN = /^req-\d{8}-\d{3}-[a-z0-9_-]+$/;
-const RUNS_BASE_DIR = path.resolve(".blueprint/runs");
+
+/**
+ * Run 디렉토리 경로 동적 결정
+ */
+function getRunsBaseDir(): string {
+  return process.env.TEST_RUN_DIR || path.resolve(".blueprint/runs");
+}
 
 /**
  * Run ID 검증
@@ -33,8 +39,9 @@ function validateRunId(runId: string): boolean {
  * 저장 경로 보안 검사 (탈출 차단)
  */
 function securePath(runId: string, relativePath: string): string {
-  const resolved = path.resolve(RUNS_BASE_DIR, runId, relativePath);
-  const base = path.resolve(RUNS_BASE_DIR, runId);
+  const baseDir = getRunsBaseDir();
+  const resolved = path.resolve(baseDir, runId, relativePath);
+  const base = path.resolve(baseDir, runId);
 
   if (!resolved.startsWith(base + path.sep) && resolved !== base) {
     throw new Error(`Path traversal detected: ${relativePath}`);
@@ -141,7 +148,7 @@ export async function loadManifest(runId: string): Promise<RunMetadata> {
 }
 
 /**
- * Artifact 저장 (revision 불변성 보장)
+ * Artifact 저장 (revision 불변성 보장, 경로 기반 저장 지원)
  */
 export async function saveArtifact(
   runId: string,
@@ -154,7 +161,10 @@ export async function saveArtifact(
   }
 
   const checksum = calculateChecksum(content);
-  const fileName = `${artifactType}.v${versionNumber}.json`;
+  // 경로 기반 아티팩트 (예: "validation/initial") 지원
+  const fileName = artifactType.includes('/')
+    ? `${artifactType}.json`
+    : `${artifactType}.v${versionNumber}.json`;
   const filePath = securePath(runId, fileName);
 
   // Revision 덮어쓰기 금지
@@ -197,7 +207,7 @@ export async function saveArtifact(
 }
 
 /**
- * Artifact 로드
+ * Artifact 로드 (경로 기반 로드 지원)
  */
 export async function loadArtifact(
   runId: string,
@@ -208,7 +218,10 @@ export async function loadArtifact(
     throw new Error(`Invalid run ID format: ${runId}`);
   }
 
-  const fileName = `${artifactType}.v${versionNumber}.json`;
+  // 경로 기반 아티팩트 (예: "validation/initial") 지원
+  const fileName = artifactType.includes('/')
+    ? `${artifactType}.json`
+    : `${artifactType}.v${versionNumber}.json`;
   const filePath = securePath(runId, fileName);
 
   if (!fs.existsSync(filePath)) {

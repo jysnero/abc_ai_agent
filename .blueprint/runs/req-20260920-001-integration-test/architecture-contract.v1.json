@@ -1,0 +1,1 @@
+{"required_files":["src/main.ts","src/utils.ts"],"allowed_globs":["src/**/*.ts","tests/**/*.ts"],"bridge_api_calls":[],"validation_commands":["typecheck","build"],"max_artifact_size":1048576}

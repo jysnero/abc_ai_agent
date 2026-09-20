@@ -17,6 +17,7 @@ import type { ExecutionPlan } from "../orchestrator.js";
 export interface DeveloperAgentConfig {
   apiKey?: string;
   model?: string;
+  client?: IAgentClient;  // For dependency injection (testing)
 }
 
 export interface DeveloperAgentResult {
@@ -32,7 +33,7 @@ export class DeveloperAgent {
   private model: string;
 
   constructor(config: DeveloperAgentConfig = {}) {
-    this.client = createAgentClient({
+    this.client = config.client || createAgentClient({
       apiKey: config.apiKey,
       timeout_ms: 60000,
       max_retries: 3,

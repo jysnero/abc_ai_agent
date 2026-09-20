@@ -146,48 +146,74 @@ import path from "path";
  * 경로 보안 검증: 작업공간 탈출 차단
  *
  * 검사 항목:
- * - 절대경로 (Unix, Windows)
- * - Windows 드라이브 경로 (C:\, D:\, ...)
- * - UNC 경로 (\\server\share)
- * - 부모 디렉토리 탈출 (../)
+ * - 절대경로 (POSIX, Windows 양쪽 모두)
+ * - Windows 드라이브 경로 (C:, C:\, C:/, ...)
+ * - UNC 경로 (\\server\share, //server/share)
+ * - Windows device namespace (\\?, \\.)
+ * - Null byte 공격
+ * - 부모 디렉토리 탈출 (..)
  * - 정규화 후 작업공간 외부
  *
- * 안전성: path.resolve + path.relative 사용
+ * 안전성: path.posix/win32 + path.resolve + path.relative 사용
  */
 function normalizePath(
   filePath: string,
   workspace: string = process.cwd()
 ): { normalized: string; isValid: boolean; error?: string } {
-  // 1. Windows 경로를 POSIX로 변환
-  const posixPath = filePath.replace(/\\/g, "/");
-
-  // 2. 절대경로 감지
-  if (path.isAbsolute(filePath) || posixPath.startsWith("/")) {
-    return { normalized: filePath, isValid: false, error: "Absolute path not allowed" };
+  // 1. Null byte 거부
+  if (filePath.includes("\0")) {
+    return { normalized: filePath, isValid: false, error: "Null byte in path not allowed" };
   }
 
-  // 3. Windows 드라이브 경로 감지 (C:, D:, ...)
+  // 2. POSIX 절대경로 감지 (/...)
+  if (path.posix.isAbsolute(filePath)) {
+    return { normalized: filePath, isValid: false, error: "POSIX absolute path not allowed" };
+  }
+
+  // 3. Windows device namespace 감지 (\\?, \\.) - UNC보다 먼저 검사
+  if (filePath.startsWith("\\\\.") || filePath.startsWith("\\\\?")) {
+    return { normalized: filePath, isValid: false, error: "Windows device namespace not allowed" };
+  }
+
+  // 4. UNC 경로 감지 (\\server\share, //server/share) - Windows drive보다 먼저 검사
+  // path.win32.isAbsolute는 UNC도 절대경로로 인정하므로 먼저 거부
+  if (filePath.startsWith("\\\\") || filePath.startsWith("//")) {
+    return { normalized: filePath, isValid: false, error: "UNC path not allowed" };
+  }
+
+  // 5. Windows 절대경로 감지 (path.win32.isAbsolute)
+  // 이는 C:\, C:/, D:\ 등을 감지함 (UNC 제외, 위에서 이미 처리)
+  if (path.win32.isAbsolute(filePath)) {
+    return { normalized: filePath, isValid: false, error: "Windows drive absolute path not allowed" };
+  }
+
+  // 6. Windows 드라이브 접두사 명시적 감지
+  // C:, D:, 등의 형태 (backslash나 slash 없이도)
   if (/^[a-zA-Z]:/.test(filePath)) {
     return { normalized: filePath, isValid: false, error: "Windows drive path not allowed" };
   }
 
-  // 4. UNC 경로 감지 (\\server\share)
-  if (posixPath.startsWith("//") || filePath.startsWith("\\\\")) {
-    return { normalized: filePath, isValid: false, error: "UNC path not allowed" };
-  }
+  // 7. 역슬래시를 포워드 슬래시로 정규화
+  const normalized = filePath.replace(/\\/g, "/");
 
-  // 5. 빠른 문자열 검사 (../ 직접 포함)
-  if (posixPath.includes("../") || posixPath.startsWith("..")) {
+  // 8. 정규화 후 .. segment 검사 (split하여 각 segment 검사)
+  const segments = normalized.split("/");
+  if (segments.includes("..")) {
     return { normalized: filePath, isValid: false, error: "Parent directory traversal detected" };
   }
 
-  // 6. 정규화 후 작업공간 외부 확인
+  // 9. 빠른 문자열 검사 (..가 바로 시작하거나 ../ 포함)
+  if (normalized.startsWith("..") || normalized.includes("/..")) {
+    return { normalized: filePath, isValid: false, error: "Parent directory traversal detected" };
+  }
+
+  // 10. 정규화 후 작업공간 외부 확인
   try {
     const resolved = path.resolve(workspace, filePath);
     const relative = path.relative(workspace, resolved);
 
     // relative가 .. 로 시작하면 작업공간 외부
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    if (relative.startsWith("..")) {
       return {
         normalized: filePath,
         isValid: false,
@@ -195,14 +221,14 @@ function normalizePath(
       };
     }
 
-    // 정규화된 경로 반환
-    const normalized = relative.replace(/\\/g, "/");
-    return { normalized, isValid: true };
+    // Windows path.relative는 \ 사용, 포워드 슬래시로 정규화
+    const finalNormalized = relative.replace(/\\/g, "/");
+    return { normalized: finalNormalized, isValid: true };
   } catch (err) {
     return {
       normalized: filePath,
       isValid: false,
-      error: `Path resolution failed: ${err}`,
+      error: `Path resolution failed: ${String(err)}`,
     };
   }
 }

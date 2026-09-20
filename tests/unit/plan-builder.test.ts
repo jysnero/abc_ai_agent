@@ -68,8 +68,13 @@ test("Plan Builder: validateExecutionPlan rejects absolute paths", () => {
 
   const result = validateExecutionPlan(invalidPlan, mockContract);
 
-  assert.strictEqual(result.valid, false, "Plan with absolute path should fail");
-  assert(result.errors.some((e) => e.includes("Absolute path")), "Should reject absolute paths");
+  if (result.valid === true) {
+    console.log("DEBUG: absolute path test - result.valid is true");
+    console.log("DEBUG: errors:", result.errors);
+  }
+
+  assert.strictEqual(result.valid, false, `Plan with absolute path should fail. Errors: ${JSON.stringify(result.errors)}`);
+  assert(result.errors.some((e) => e.includes("Absolute") || e.includes("absolute")), `Should reject absolute paths. Errors: ${JSON.stringify(result.errors)}`);
 });
 
 test("Plan Builder: validateExecutionPlan rejects traversal paths", () => {
@@ -107,8 +112,14 @@ test("Plan Builder: validateExecutionPlan rejects UNC paths", () => {
 
   const result = validateExecutionPlan(invalidPlan, mockContract);
 
-  assert.strictEqual(result.valid, false, "Plan with UNC path should fail");
-  assert(result.errors.some((e) => e.includes("UNC")), "Should reject UNC paths");
+  // 디버그: 실제 에러 내용 확인
+  if (result.valid === true) {
+    console.log("DEBUG: result.valid is true but should be false");
+    console.log("DEBUG: errors array:", result.errors);
+  }
+
+  assert.strictEqual(result.valid, false, `Plan with UNC path should fail. Errors: ${JSON.stringify(result.errors)}`);
+  assert(result.errors.some((e) => e.includes("UNC")), `Should reject UNC paths. Errors: ${JSON.stringify(result.errors)}`);
 });
 
 test("Plan Builder: validateExecutionPlan validates bridge usage", () => {
