@@ -29,14 +29,39 @@ function getRunsBaseDir(): string {
 }
 
 /**
+ * SHA-256 checksum validation pattern
+ * Format: sha256:<64 lowercase hex characters>
+ */
+const SHA256_CHECKSUM_PATTERN = /^sha256:[a-f0-9]{64}$/;
+
+/**
+ * Validate checksum format
+ */
+export function validateChecksumFormat(checksum: string | undefined): boolean {
+  if (!checksum) return false;
+  return SHA256_CHECKSUM_PATTERN.test(checksum);
+}
+
+/**
  * Accessor: request_spec_revision (checksum)
  *
  * TODO(v0.2): Migrate to structured format
  * Currently stores SHA-256 checksum; will refactor to:
  * { revision: number; path: string; checksum: string }
+ *
+ * Validates checksum format (sha256:<64-char hex>)
  */
-export function getRequestSpecChecksum(manifest: RunMetadata): string | undefined {
-  return manifest.request_spec_revision;
+export function getRequestSpecChecksum(manifest: RunMetadata): string {
+  const checksum = manifest.request_spec_revision;
+  if (!checksum) {
+    throw new Error("INVALID_CHECKSUM_FORMAT: request_spec_revision missing");
+  }
+  if (!validateChecksumFormat(checksum)) {
+    throw new Error(
+      `INVALID_CHECKSUM_FORMAT: request_spec_revision must be sha256:<64-char hex>, got: ${checksum}`
+    );
+  }
+  return checksum;
 }
 
 /**
@@ -62,12 +87,12 @@ function securePath(runId: string, relativePath: string): string {
 }
 
 /**
- * Checksum 계산
+ * Checksum 계산 (전체 SHA-256 digest, 64자리)
  */
 function calculateChecksum(content: string | Buffer): string {
   const hash = createHash("sha256");
   hash.update(content);
-  return `sha256:${hash.digest("hex").slice(0, 16)}`; // 짧은 형식
+  return `sha256:${hash.digest("hex")}`;
 }
 
 /**
@@ -293,11 +318,17 @@ export async function transitionState(
     if (currentRequestSpec) {
       const checksum = calculateChecksum(currentRequestSpec);
       // Use accessor for future-proof manifest field access
-      const storedChecksum = getRequestSpecChecksum(manifest);
-      if (storedChecksum && checksum !== manifest.spec_approval.artifact_checksums.request_spec) {
-        // 승인 무효화
+      try {
+        const storedChecksum = getRequestSpecChecksum(manifest);
+        if (checksum !== manifest.spec_approval.artifact_checksums.request_spec) {
+          // 승인 무효화
+          manifest.spec_approval = undefined;
+          console.warn(`SPEC approval invalidated: request-spec changed`);
+        }
+      } catch (error) {
+        // Invalid checksum format in manifest - mark approval as invalid
+        console.warn(`SPEC approval invalidated: invalid checksum format`);
         manifest.spec_approval = undefined;
-        console.warn(`SPEC approval invalidated: request-spec changed`);
       }
     }
   }

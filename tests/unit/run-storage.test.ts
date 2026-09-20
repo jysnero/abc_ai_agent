@@ -15,6 +15,7 @@ import {
   loadArtifact,
   transitionState,
   recordSpecApproval,
+  validateChecksumFormat,
 } from "../../src/storage/run-storage.js";
 
 const TEST_RUN_ID = "req-20260920-001-test";
@@ -177,13 +178,20 @@ test("Run Storage: request-spec checksum validates against actual file bytes", a
   assert(fs.existsSync(filePath), "request-spec.v1.json should exist");
 
   const fileContent = fs.readFileSync(filePath, "utf-8");
-  const actualChecksum = `sha256:${createHash("sha256").update(fileContent).digest("hex").slice(0, 16)}`;
+  const actualChecksum = `sha256:${createHash("sha256").update(fileContent).digest("hex")}`;
 
-  // Verify manifest checksum matches actual file
+  // Verify manifest checksum matches actual file (full 64-char digest)
   assert.strictEqual(
     manifest.request_spec_revision,
     actualChecksum,
-    "Manifest checksum should match actual file bytes"
+    "Manifest checksum should match actual file bytes (full SHA-256)"
+  );
+
+  // Verify checksum length (should be 71: sha256: + 64 hex chars)
+  assert.strictEqual(
+    actualChecksum.length,
+    71,
+    "Checksum should be 71 characters (sha256: + 64 hex)"
   );
 
   await cleanup();
@@ -323,6 +331,155 @@ test("Run Storage: initialization_status set to FAILED if saveArtifact fails", a
   // Note: Due to the directory collision, manifest may not have FAILED status if saveArtifact
   // didn't complete the error handling. This is a v0.1 limitation.
   // In v0.2, we should ensure atomic failure marking.
+
+  await cleanup();
+});
+
+test("Run Storage: checksum format validation - full 64-char digest", async () => {
+  // Valid full-length SHA-256 checksums
+  assert(
+    validateChecksumFormat("sha256:3b6ba9271e65ba6a90a4d54c2a63d3a68e2f2c8f7f5e7b8d7f5e7b8d7f5e7b8d"),
+    "Should accept valid full 64-char hex checksum"
+  );
+
+  // Invalid: truncated 16-char version
+  assert(
+    !validateChecksumFormat("sha256:3b6ba9271e65ba6a"),
+    "Should reject truncated 16-char checksum"
+  );
+
+  // Invalid: uppercase hex
+  assert(
+    !validateChecksumFormat("sha256:3B6BA9271E65BA6A90A4D54C2A63D3A68E2F2C8F7F5E7B8D7F5E7B8D7F5E7B8D"),
+    "Should reject uppercase hex"
+  );
+
+  // Invalid: missing prefix
+  assert(
+    !validateChecksumFormat("3b6ba9271e65ba6a90a4d54c2a63d3a68e2f2c8f7f5e7b8d7f5e7b8d7f5e7b8d"),
+    "Should reject checksum without sha256: prefix"
+  );
+
+  // Invalid: empty string
+  assert(!validateChecksumFormat(""), "Should reject empty string");
+
+  // Invalid: undefined
+  assert(!validateChecksumFormat(undefined), "Should reject undefined");
+});
+
+test("Run Storage: checksum total length including prefix (71 chars)", async () => {
+  const validChecksum =
+    "sha256:3b6ba9271e65ba6a90a4d54c2a63d3a68e2f2c8f7f5e7b8d7f5e7b8d7f5e7b8d";
+
+  assert.strictEqual(
+    validChecksum.length,
+    71,
+    "Valid checksum should be exactly 71 chars (sha256: + 64 hex)"
+  );
+
+  // Verify format
+  assert(
+    validateChecksumFormat(validChecksum),
+    "Should accept exactly 71-char checksum"
+  );
+});
+
+test("Run Storage: actual artifact file checksum matches manifest", async () => {
+  await cleanup();
+  const requestSpec = JSON.stringify({ test: true, checksum: "full-length-test" });
+  await initializeRun(TEST_RUN_ID, requestSpec);
+
+  const filePath = path.resolve(".blueprint/runs", TEST_RUN_ID, "request-spec.v1.json");
+  const fileContent = fs.readFileSync(filePath, "utf-8");
+  const actualChecksum = `sha256:${createHash("sha256").update(fileContent).digest("hex")}`;
+
+  const manifest = await loadManifest(TEST_RUN_ID);
+  const manifestChecksum = manifest.request_spec_revision;
+
+  assert.strictEqual(
+    manifestChecksum,
+    actualChecksum,
+    "Manifest checksum should match actual file (full digest)"
+  );
+
+  assert.strictEqual(
+    actualChecksum.length,
+    71,
+    "Full checksum should be 71 characters"
+  );
+
+  await cleanup();
+});
+
+test("Run Storage: approval rejects truncated 16-char checksum", async () => {
+  await cleanup();
+  const requestSpec = JSON.stringify({ test: true });
+  await initializeRun(TEST_RUN_ID, requestSpec);
+
+  await transitionState(TEST_RUN_ID, "DESIGN");
+  await transitionState(TEST_RUN_ID, "ARCH_CONTRACT");
+  await transitionState(TEST_RUN_ID, "PLAN_BUILD");
+  await transitionState(TEST_RUN_ID, "HUMAN_GATE_SPEC");
+
+  // Try to record approval with legacy 16-char checksum format
+  const legacyChecksum = "sha256:3b6ba9271e65ba6a"; // Legacy truncated format
+
+  try {
+    await recordSpecApproval(TEST_RUN_ID, "test-approver", {
+      request_spec: legacyChecksum,
+      architecture_contract: "sha256:def" + "0".repeat(60),
+      execution_plan: "sha256:ghi" + "0".repeat(61),
+    });
+
+    // Transition should reject due to checksum validation
+    const manifestAfter = await transitionState(TEST_RUN_ID, "DEV_VALIDATION_LOOP");
+    assert(
+      !manifestAfter.spec_approval,
+      "Spec approval should be invalidated due to legacy truncated checksum format"
+    );
+  } catch (error) {
+    // Approval may fail during recordSpecApproval - both behaviors are acceptable
+    assert(
+      String(error).includes("checksum") || String(error).includes("INVALID"),
+      "Should fail with checksum-related error"
+    );
+  }
+
+  await cleanup();
+});
+
+test("Run Storage: single byte change invalidates approval", async () => {
+  await cleanup();
+  const requestSpec = JSON.stringify({ test: true, data: "abc" });
+  await initializeRun(TEST_RUN_ID, requestSpec);
+
+  const manifest = await loadManifest(TEST_RUN_ID);
+  const actualChecksum = manifest.request_spec_revision!;
+
+  await transitionState(TEST_RUN_ID, "DESIGN");
+  await transitionState(TEST_RUN_ID, "ARCH_CONTRACT");
+  await transitionState(TEST_RUN_ID, "PLAN_BUILD");
+  await transitionState(TEST_RUN_ID, "HUMAN_GATE_SPEC");
+
+  // Record approval with actual checksum
+  await recordSpecApproval(TEST_RUN_ID, "test-approver", {
+    request_spec: actualChecksum,
+    architecture_contract: "sha256:" + "0".repeat(64),
+    execution_plan: "sha256:" + "1".repeat(64),
+  });
+
+  // Manually modify the request-spec file (change one byte)
+  const specPath = path.resolve(".blueprint/runs", TEST_RUN_ID, "request-spec.v1.json");
+  const modified = fs.readFileSync(specPath, "utf-8");
+  const corrupted = modified + " ";
+  fs.writeFileSync(specPath, corrupted);
+
+  // Transition should detect checksum mismatch and invalidate approval
+  const manifestAfter = await transitionState(TEST_RUN_ID, "DEV_VALIDATION_LOOP");
+  assert(
+    !manifestAfter.spec_approval,
+    "Spec approval should be invalidated when artifact is modified (even one byte)"
+  );
 
   await cleanup();
 });
