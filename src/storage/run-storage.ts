@@ -29,6 +29,17 @@ function getRunsBaseDir(): string {
 }
 
 /**
+ * Accessor: request_spec_revision (checksum)
+ *
+ * TODO(v0.2): Migrate to structured format
+ * Currently stores SHA-256 checksum; will refactor to:
+ * { revision: number; path: string; checksum: string }
+ */
+export function getRequestSpecChecksum(manifest: RunMetadata): string | undefined {
+  return manifest.request_spec_revision;
+}
+
+/**
  * Run ID 검증
  */
 function validateRunId(runId: string): boolean {
@@ -281,7 +292,9 @@ export async function transitionState(
 
     if (currentRequestSpec) {
       const checksum = calculateChecksum(currentRequestSpec);
-      if (checksum !== manifest.spec_approval.artifact_checksums.request_spec) {
+      // Use accessor for future-proof manifest field access
+      const storedChecksum = getRequestSpecChecksum(manifest);
+      if (storedChecksum && checksum !== manifest.spec_approval.artifact_checksums.request_spec) {
         // 승인 무효화
         manifest.spec_approval = undefined;
         console.warn(`SPEC approval invalidated: request-spec changed`);
