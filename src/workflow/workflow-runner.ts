@@ -11,6 +11,7 @@
 
 import type { AgentOrchestrator } from "../orchestrator.js";
 import type { IValidationRunner } from "../validation/validation-runner.interface.js";
+import type { ArtifactMetadata } from "../storage/run-storage.types.js";
 import { buildExecutionPlan, validateExecutionPlan } from "../builders/plan-builder.js";
 import {
   initializeRun,
@@ -21,6 +22,7 @@ import {
   recordSpecApproval,
   recordReleaseApproval,
   incrementRetryCount,
+  listArtifacts as listStoredArtifacts,
 } from "../storage/run-storage.js";
 import { calculateChecksum } from "../validation/validation-runner.js";
 import { DeveloperAgent } from "../agents/developer.js";
@@ -79,7 +81,7 @@ export class WorkflowRunner {
       requirements: JSON.parse(input.requestSpec).requirements || "",
     });
 
-    // Run Storage 초기화
+    // Run Storage 초기화 (request-spec 포함)
     await initializeRun(requestId, input.requestSpec);
 
     // Architecture Contract 저장
@@ -103,6 +105,27 @@ export class WorkflowRunner {
     // Plan 저장
     await saveArtifact(requestId, "execution-plan", JSON.stringify(executionPlan, null, 2));
 
+    // Approval target 생성 (모든 artifact 저장 후)
+    // 최신 manifest 재로드해서 stale overwrite 방지
+    const manifest = await loadManifest(requestId);
+    const specChecksum = manifest.request_spec_revision;
+    const contractChecksum = manifest.architecture_contract_revision;
+    const planChecksum = manifest.execution_plan_revision;
+
+    if (!specChecksum || !contractChecksum || !planChecksum) {
+      throw new Error(
+        `Missing artifact checksums: spec=${specChecksum}, contract=${contractChecksum}, plan=${planChecksum}`
+      );
+    }
+
+    // approval_targets.spec 생성 (모든 artifact 저장 후)
+    const { createSpecApprovalTarget } = await import("../storage/run-storage.js");
+    await createSpecApprovalTarget(requestId, {
+      request_spec: specChecksum,
+      architecture_contract: contractChecksum,
+      execution_plan: planChecksum,
+    });
+
     // HUMAN_GATE_SPEC에 도달
     await transitionState(requestId, "HUMAN_GATE_SPEC");
 
@@ -110,10 +133,44 @@ export class WorkflowRunner {
   }
 
   /**
-   * Spec 승인 후 재개
+   * Spec 승인 저장 (승인만, 실행 아님)
+   */
+  async submitSpecApproval(runId: string, approval: WorkflowApproval): Promise<string> {
+    console.log(`[WorkflowRunner] submitSpecApproval START for ${runId}`);
+
+    // Run 상태 검증
+    const manifest = await loadManifest(runId);
+    if (manifest.status !== "HUMAN_GATE_SPEC") {
+      throw new Error(
+        `Cannot approve spec in state ${manifest.status}. Current state must be HUMAN_GATE_SPEC.`
+      );
+    }
+
+    // Approval target checksum 계산
+    const contractArtifact = await loadArtifact(runId, "architecture-contract");
+    const planArtifact = await loadArtifact(runId, "execution-plan");
+    const specArtifact = await loadArtifact(runId, "request-spec");
+    console.log(`[WorkflowRunner] artifacts loaded: contract=${!!contractArtifact}, plan=${!!planArtifact}, spec=${!!specArtifact}`);
+
+    const specChecksums = {
+      request_spec: calculateChecksum(specArtifact || ""),
+      architecture_contract: calculateChecksum(contractArtifact || ""),
+      execution_plan: calculateChecksum(planArtifact || ""),
+    };
+
+    // 승인 기록 및 checksum 반환 (run-storage에서 결정론적으로 계산)
+    const targetChecksum = await recordSpecApproval(runId, approval.approver, specChecksums);
+    console.log(`[WorkflowRunner] spec approval recorded, target checksum: ${targetChecksum}`);
+
+    return targetChecksum;
+  }
+
+  /**
+   * Spec 승인 후 재개 (v0.1 호환성 유지)
+   * @deprecated 신규 코드는 submitSpecApproval() + resumeRun() 사용
    */
   async resumeAfterSpecApproval(runId: string, approval: WorkflowApproval): Promise<void> {
-    console.log(`[WorkflowRunner] resumeAfterSpecApproval START for ${runId}`);
+    console.log(`[WorkflowRunner] resumeAfterSpecApproval START for ${runId} (deprecated)`);
 
     // Run 초기화 상태 검증
     const manifest = await loadManifest(runId);
@@ -124,18 +181,51 @@ export class WorkflowRunner {
       );
     }
 
-    // 승인 기록
-    const contractArtifact = await loadArtifact(runId, "architecture-contract");
-    const planArtifact = await loadArtifact(runId, "execution-plan");
-    const specArtifact = await loadArtifact(runId, "request-spec");
-    console.log(`[WorkflowRunner] artifacts loaded: contract=${!!contractArtifact}, plan=${!!planArtifact}, spec=${!!specArtifact}`);
+    // submitSpecApproval 호출 (이미 승인된 경우 에러 처리)
+    if (!manifest.spec_approval) {
+      await this.submitSpecApproval(runId, approval);
+    }
 
-    await recordSpecApproval(runId, approval.approver, {
-      request_spec: calculateChecksum(specArtifact || ""),
-      architecture_contract: calculateChecksum(contractArtifact || ""),
-      execution_plan: calculateChecksum(planArtifact || ""),
-    });
-    console.log(`[WorkflowRunner] spec approval recorded`);
+    // resumeRun 호출
+    await this.resumeRun(runId);
+  }
+
+  /**
+   * Workflow 재개 (현재 상태에 따라 다르게 동작)
+   * - HUMAN_GATE_SPEC + 유효한 승인 → DEV_VALIDATION_LOOP 실행
+   * - HUMAN_GATE_RELEASE + 유효한 승인 → RELEASE_READY로 전환
+   */
+  async resumeRun(runId: string): Promise<void> {
+    console.log(`[WorkflowRunner] resumeRun START for ${runId}`);
+
+    const manifest = await loadManifest(runId);
+    if (manifest.initialization_status !== "READY") {
+      throw new Error(
+        `Cannot resume run in ${manifest.initialization_status || "unknown"} initialization state. ` +
+        `Run must be READY to execute.`
+      );
+    }
+
+    // HUMAN_GATE_RELEASE 상태에서 호출된 경우: 승인 후 완료
+    if (manifest.status === "HUMAN_GATE_RELEASE") {
+      if (!manifest.release_approval) {
+        throw new Error(`Cannot resume: release has not been approved. Call submitReleaseApproval first.`);
+      }
+      await this.markReleaseReady(runId);
+      return;
+    }
+
+    // HUMAN_GATE_SPEC 상태: 개발·검증 실행
+    if (manifest.status !== "HUMAN_GATE_SPEC") {
+      throw new Error(
+        `Cannot resume from state ${manifest.status}. Current state must be HUMAN_GATE_SPEC or HUMAN_GATE_RELEASE.`
+      );
+    }
+
+    // Spec 승인 확인
+    if (!manifest.spec_approval) {
+      throw new Error(`Cannot resume: spec has not been approved. Call submitSpecApproval first.`);
+    }
 
     // DEV_VALIDATION_LOOP 시작
     try {
@@ -147,6 +237,10 @@ export class WorkflowRunner {
       console.log(`[WorkflowRunner] ERROR: ${errMsg}`);
       throw new Error(errMsg);
     }
+
+    // Load artifacts for execution
+    const contractArtifact = await loadArtifact(runId, "architecture-contract");
+    const planArtifact = await loadArtifact(runId, "execution-plan");
 
     // Developer Agent 실행
     console.log(`[WorkflowRunner] about to call developerAgent.executeByPlan`);
@@ -325,10 +419,19 @@ export class WorkflowRunner {
   }
 
   /**
-   * Release 승인 후 재개
+   * Release 승인 저장 (승인만, 실행 아님)
    */
-  async resumeAfterReleaseApproval(runId: string, approval: WorkflowApproval): Promise<void> {
-    // 승인 기록
+  async submitReleaseApproval(runId: string, approval: WorkflowApproval): Promise<string> {
+    console.log(`[WorkflowRunner] submitReleaseApproval START for ${runId}`);
+
+    const manifest = await loadManifest(runId);
+    if (manifest.status !== "HUMAN_GATE_RELEASE") {
+      throw new Error(
+        `Cannot approve release in state ${manifest.status}. Current state must be HUMAN_GATE_RELEASE.`
+      );
+    }
+
+    // Release approval target checksum 계산
     const devResultArtifact = await loadArtifact(runId, "developer-result");
 
     // Validation report: 최종 검증 결과 로드
@@ -342,13 +445,60 @@ export class WorkflowRunner {
       }
     }
 
-    await recordReleaseApproval(runId, approval.approver, {
+    const releaseChecksums = {
       developer_result: calculateChecksum(devResultArtifact || ""),
       validation_report: calculateChecksum(validationReportArtifact || ""),
-    });
+    };
+
+    // 승인 기록 및 checksum 반환 (run-storage에서 결정론적으로 계산)
+    const targetChecksum = await recordReleaseApproval(runId, approval.approver, releaseChecksums);
+    console.log(`[WorkflowRunner] release approval recorded, target checksum: ${targetChecksum}`);
+
+    return targetChecksum;
+  }
+
+  /**
+   * Release 승인 후 재개 (v0.1 호환성 유지)
+   * @deprecated 신규 코드는 submitReleaseApproval() + completeRun() 사용
+   */
+  async resumeAfterReleaseApproval(runId: string, approval: WorkflowApproval): Promise<void> {
+    console.log(`[WorkflowRunner] resumeAfterReleaseApproval START for ${runId} (deprecated)`);
+
+    const manifest = await loadManifest(runId);
+    if (!manifest.release_approval) {
+      await this.submitReleaseApproval(runId, approval);
+    }
+
+    await this.completeRun(runId);
+  }
+
+  /**
+   * Release 준비 완료 (RELEASE_READY로 전환, v0.1 종료)
+   */
+  async markReleaseReady(runId: string): Promise<void> {
+    console.log(`[WorkflowRunner] markReleaseReady START for ${runId}`);
+
+    const manifest = await loadManifest(runId);
+    if (manifest.status !== "HUMAN_GATE_RELEASE") {
+      throw new Error(
+        `Cannot mark release ready in state ${manifest.status}. Current state must be HUMAN_GATE_RELEASE.`
+      );
+    }
+
+    if (!manifest.release_approval) {
+      throw new Error(`Cannot mark release ready: release has not been approved. Call submitReleaseApproval first.`);
+    }
 
     // RELEASE_READY (v0.1 종료)
     await transitionState(runId, "RELEASE_READY");
+  }
+
+  /**
+   * 호환성 유지용 completeRun (v0.1)
+   * @deprecated 신규 코드는 markReleaseReady() 사용
+   */
+  async completeRun(runId: string): Promise<void> {
+    await this.markReleaseReady(runId);
   }
 
   /**
@@ -399,5 +549,12 @@ export class WorkflowRunner {
    */
   async loadArtifact(runId: string, artifactPath: string): Promise<string | null> {
     return await loadArtifact(runId, artifactPath);
+  }
+
+  /**
+   * Run의 모든 artifact 메타데이터 조회
+   */
+  async listArtifacts(runId: string): Promise<ArtifactMetadata[]> {
+    return await listStoredArtifacts(runId);
   }
 }

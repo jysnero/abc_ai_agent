@@ -11,6 +11,7 @@
  * - 코드 생성 (DeveloperAgent)
  */
 
+import { randomUUID } from "crypto";
 import { DeveloperAgent } from "./agents/developer.js";
 import { buildExecutionPlan, validateExecutionPlan } from "./builders/plan-builder.js";
 import { runValidationSuite, calculateChecksum } from "./validation/validation-runner.js";
@@ -104,7 +105,6 @@ export class AgentOrchestrator {
   private tasks: Map<string, AgentTask> = new Map();
   private requests: Map<string, Request> = new Map();
   private taskIdCounter: number = 0;
-  private requestIdCounter: number = 0;
   private developerAgent: DeveloperAgent;
 
   private readonly MAX_ARCH_RETRIES = 2;
@@ -124,7 +124,6 @@ export class AgentOrchestrator {
       throw new Error(`Agent with ID '${agent.id}' already registered`);
     }
     this.agents.set(agent.id, agent);
-    console.log(`✓ Agent registered: ${agent.name} (${agent.role})`);
   }
 
   /**
@@ -151,20 +150,23 @@ export class AgentOrchestrator {
 
   /**
    * 새 요청 생성 (PLANNING 상태로 시작)
+   * UUID 기반 전체 엔트로피 보존 (충돌 방지)
    */
   createRequest(userInput: Request["userInput"]): string {
-    const requestId = `req-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(++this.requestIdCounter).padStart(3, "0")}-${userInput.target}`;
+    const now = new Date();
+    const uuid = randomUUID();
+    // run-<UUID> 형식으로 전체 UUID 엔트로피 유지
+    const runId = `run-${uuid}`;
     const request: Request = {
-      id: requestId,
+      id: runId,
       status: "PLANNING",
       userInput,
       retryCount: { arch: 0, devRepair: 0 },
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
     };
-    this.requests.set(requestId, request);
-    console.log(`✓ Request created: ${requestId} (PLANNING)`);
-    return requestId;
+    this.requests.set(runId, request);
+    return runId;
   }
 
   /**

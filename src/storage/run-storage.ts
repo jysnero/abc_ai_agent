@@ -17,9 +17,9 @@
 import fs from "fs";
 import path from "path";
 import { createHash } from "crypto";
-import { RunMetadata, StateTransitionEvent } from "./run-storage.types.js";
+import { RunMetadata, StateTransitionEvent, ArtifactMetadata } from "./run-storage.types.js";
 
-const RUN_ID_PATTERN = /^req-\d{8}-\d{3}-[a-z0-9_-]+$/;
+const RUN_ID_PATTERN = /^run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
  * Run 디렉토리 경로 동적 결정
@@ -93,6 +93,16 @@ function calculateChecksum(content: string | Buffer): string {
   const hash = createHash("sha256");
   hash.update(content);
   return `sha256:${hash.digest("hex")}`;
+}
+
+/**
+ * 결정론적 approval target checksum 계산
+ * 정렬된 구성요소 이름과 전체 SHA-256 값을 이용해 재현성 보장
+ */
+function calculateApprovalTargetChecksum(components: Record<string, string>): string {
+  const sorted = Object.keys(components).sort();
+  const orderedStr = JSON.stringify(sorted.map(key => [key, components[key]]));
+  return calculateChecksum(orderedStr);
 }
 
 /**
@@ -390,17 +400,70 @@ export async function recordSpecApproval(
     architecture_contract: string;
     execution_plan: string;
   }
-): Promise<void> {
+): Promise<string> {
   const manifest = await loadManifest(runId);
+  const now = new Date().toISOString();
 
+  // Calculate approval target checksum (deterministic)
+  const targetChecksum = calculateApprovalTargetChecksum(artifactChecksums);
+
+  // Record approval
   manifest.spec_approval = {
     approver,
-    approved_at: new Date().toISOString(),
+    approved_at: now,
     artifact_checksums: artifactChecksums,
   };
 
+  // Store approval targets (permanent record)
+  if (!manifest.approval_targets) {
+    manifest.approval_targets = {};
+  }
+  manifest.approval_targets.spec = {
+    checksum: targetChecksum,
+    components: artifactChecksums,
+    created_at: now,
+  };
+
+  manifest.updated_at = now;
   const manifestPath = securePath(runId, "manifest.json");
   await atomicWrite(manifestPath, JSON.stringify(manifest, null, 2));
+
+  return targetChecksum;
+}
+
+/**
+ * Approval target 생성 (SPEC) - approval 기다리는 상태에서 호출
+ * spec_approval은 생성하지 않음 (approve-spec 명령에서만)
+ */
+export async function createSpecApprovalTarget(
+  runId: string,
+  artifactChecksums: {
+    request_spec: string;
+    architecture_contract: string;
+    execution_plan: string;
+  }
+): Promise<string> {
+  const manifest = await loadManifest(runId);
+  const now = new Date().toISOString();
+
+  // Calculate approval target checksum (deterministic)
+  const targetChecksum = calculateApprovalTargetChecksum(artifactChecksums);
+
+  // Store approval targets (but do NOT create spec_approval record yet)
+  if (!manifest.approval_targets) {
+    manifest.approval_targets = {};
+  }
+  manifest.approval_targets.spec = {
+    checksum: targetChecksum,
+    components: artifactChecksums,
+    created_at: now,
+  };
+
+  manifest.updated_at = now;
+  const manifestPath = securePath(runId, "manifest.json");
+  await atomicWrite(manifestPath, JSON.stringify(manifest, null, 2));
+
+  return targetChecksum;
 }
 
 /**
@@ -413,17 +476,34 @@ export async function recordReleaseApproval(
     developer_result: string;
     validation_report: string;
   }
-): Promise<void> {
+): Promise<string> {
   const manifest = await loadManifest(runId);
+  const now = new Date().toISOString();
+
+  // Calculate approval target checksum (deterministic)
+  const targetChecksum = calculateApprovalTargetChecksum(artifactChecksums);
 
   manifest.release_approval = {
     approver,
-    approved_at: new Date().toISOString(),
+    approved_at: now,
     artifact_checksums: artifactChecksums,
   };
 
+  // Store approval targets (permanent record)
+  if (!manifest.approval_targets) {
+    manifest.approval_targets = {};
+  }
+  manifest.approval_targets.release = {
+    checksum: targetChecksum,
+    components: artifactChecksums,
+    created_at: now,
+  };
+
+  manifest.updated_at = now;
   const manifestPath = securePath(runId, "manifest.json");
   await atomicWrite(manifestPath, JSON.stringify(manifest, null, 2));
+
+  return targetChecksum;
 }
 
 /**
@@ -443,4 +523,70 @@ export async function incrementRetryCount(
 
   const manifestPath = securePath(runId, "manifest.json");
   await atomicWrite(manifestPath, JSON.stringify(manifest, null, 2));
+}
+
+/**
+ * Artifact 목록 조회 (메타데이터만 반환)
+ * manifest에 등록된 artifact를 기준으로 반환
+ */
+export async function listArtifacts(runId: string): Promise<ArtifactMetadata[]> {
+  if (!validateRunId(runId)) {
+    throw new Error(`Invalid run ID format: ${runId}`);
+  }
+
+  const manifest = await loadManifest(runId);
+  const artifacts: ArtifactMetadata[] = [];
+  const now = new Date().toISOString();
+
+  // 각 artifact 타입별로 메타데이터 수집
+  const artifactDefs = [
+    { type: "request-spec", revision_field: "request_spec_revision", path: "request-spec.v1.json" },
+    { type: "architecture-contract", revision_field: "architecture_contract_revision", path: "architecture-contract.v1.json" },
+    { type: "execution-plan", revision_field: "execution_plan_revision", path: "execution-plan.v1.json" },
+    { type: "developer-result", revision_field: "developer_result_revision", path: "developer-result.v1.json" },
+  ];
+
+  for (const def of artifactDefs) {
+    const revision = (manifest as any)[def.revision_field];
+    if (revision) {
+      artifacts.push({
+        type: def.type,
+        revision: revision,
+        relative_path: def.path,
+        checksum: revision, // revision is stored as checksum
+        created_at: manifest.created_at, // Use manifest created_at as proxy
+      });
+    }
+  }
+
+  // Validation reports (special handling: can have multiple revisions)
+  const validationReports = [
+    { type: "validation-report", attempt: "initial", path: "validation/initial.json" },
+    { type: "validation-report", attempt: "repair-1", path: "validation/repair-1.json" },
+    { type: "validation-report", attempt: "repair-2", path: "validation/repair-2.json" },
+    { type: "validation-report", attempt: "repair-3", path: "validation/repair-3.json" },
+  ];
+
+  for (const report of validationReports) {
+    const filePath = securePath(runId, report.path);
+    if (fs.existsSync(filePath)) {
+      const content = await fs.promises.readFile(filePath, "utf-8");
+      const checksum = calculateChecksum(content);
+      artifacts.push({
+        type: report.type,
+        revision: report.attempt,
+        relative_path: report.path,
+        checksum: checksum,
+        created_at: now,
+      });
+    }
+  }
+
+  // Sort by type then revision for consistent ordering
+  artifacts.sort((a, b) => {
+    const typeCompare = a.type.localeCompare(b.type);
+    return typeCompare !== 0 ? typeCompare : a.revision.toString().localeCompare(b.revision.toString());
+  });
+
+  return artifacts;
 }

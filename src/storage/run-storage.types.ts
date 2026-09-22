@@ -25,7 +25,7 @@ export interface RunMetadata {
   developer_result_revision?: string;
   validation_report_revision?: string;
 
-  // Approval records
+  // Approval records (v0.1 format, kept for backward compat)
   spec_approval?: {
     approver: string;
     approved_at: string;
@@ -42,6 +42,27 @@ export interface RunMetadata {
     artifact_checksums: {
       developer_result: string;
       validation_report: string;
+    };
+  };
+
+  // Approval targets (v0.1+: permanent record of approval checksum and components)
+  approval_targets?: {
+    spec?: {
+      checksum: string; // SHA-256 of sorted component checksums
+      components: {
+        request_spec: string;
+        architecture_contract: string;
+        execution_plan: string;
+      };
+      created_at: string; // ISO-8601 timestamp
+    };
+    release?: {
+      checksum: string; // SHA-256 of sorted component checksums
+      components: {
+        developer_result: string;
+        validation_report: string;
+      };
+      created_at: string; // ISO-8601 timestamp
     };
   };
 
@@ -79,4 +100,12 @@ export interface RunDirectory {
     developer_result?: ArtifactRevision;
     validation_report?: ArtifactRevision;
   };
+}
+
+export interface ArtifactMetadata {
+  type: string;               // artifact type (e.g., "request-spec", "validation-report")
+  revision: number | string;  // revision or "initial"
+  relative_path: string;      // relative path within run directory
+  checksum: string;           // sha256:<64-hex>
+  created_at: string;         // ISO-8601 timestamp
 }

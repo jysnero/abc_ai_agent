@@ -8,14 +8,17 @@
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "check:arch": "tsx scripts/check-arch.ts",
+    "orchestrate": "node dist/src/cli/index.js",
+    "orchestrate:dev": "npm run build && node dist/src/cli/index.js",
     "pretest": "npm run build",
-    "test": "npm run test:unit && npm run test:workflow && npm run test:validation",
+    "test": "npm run test:unit && npm run test:workflow && npm run test:validation && npm run test:cli",
     "test:unit": "npm run test:unit:orchestrator && npm run test:unit:plan-builder && npm run test:unit:storage",
     "test:unit:orchestrator": "node --test --test-reporter=spec dist/tests/unit/orchestrator.test.js",
     "test:unit:plan-builder": "node --test --test-reporter=spec dist/tests/unit/plan-builder.test.js",
     "test:unit:storage": "node --test --test-reporter=spec dist/tests/unit/run-storage.test.js",
     "test:workflow": "node --test --test-reporter=spec dist/tests/workflow-runner.integration.test.js",
-    "test:validation": "node --test --test-reporter=spec dist/tests/integration/validation-runner.integration.test.js"
+    "test:validation": "node --test --test-reporter=spec dist/tests/integration/validation-runner.integration.test.js",
+    "test:cli": "node --test --test-reporter=spec dist/tests/cli/cli.integration.test.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest"
