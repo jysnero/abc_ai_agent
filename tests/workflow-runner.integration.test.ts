@@ -19,17 +19,17 @@ let testIndex = 0;
 const mockArchitectureContract = JSON.stringify({
   contract_id: "test-contract-v1",
   version: "1.0.0",
-  pattern_type: "minigame-shell",
+  pattern_type: "webview-component",
   issued_by: "test",
   folder_structure: {
-    required_files: ["src/main.ts"],
-    allowed_globs: ["src/**/*.ts", "tests/**/*.ts"],
+    required_files: ["src/Checkbox.tsx", "src/Checkbox.test.tsx", "README.md"],
+    allowed_globs: ["src/**/*.tsx", "src/**/*.ts", "**/*.md"],
   },
   allowed_dependencies: { script_hosts: [], npm_packages: [] },
-  bridge_contract_ref: { contract_id: "bridge", path: "./bridge.json" },
+  bridge_contract_ref: { contract_id: "none", path: "" },
   bridge_policy: {},
   forbidden_patterns: [],
-  design_tokens_ref: "tokens.json",
+  design_tokens_ref: "",
 });
 
 function createRequestSpec(scenario: string) {

@@ -92,7 +92,7 @@ export class DeveloperAgent {
   }
 
   /**
-   * Step 1: 코드 생성
+   * Step 1: 코드 생성 (### File:과 ### Test: 모두 파싱)
    */
   private async generateCode(
     plan: ExecutionPlan,
@@ -123,15 +123,38 @@ Output format: For each file, start with "### File: <path>" on a new line, then 
 
     const content = response.content;
 
-    // 파싱: "### File: <path>" 마크로부터 코드 추출
+    // 파싱: "### File: <path>"와 "### Test: <path>" 모두 지원
     const codeMap: Record<string, string> = {};
-    const matches = content.split(/^### File: /m);
 
-    for (let i = 1; i < matches.length; i++) {
-      const lines = matches[i].split("\n");
+    // File 항목 파싱
+    const fileMatches = content.split(/^### File: /m);
+    for (let i = 1; i < fileMatches.length; i++) {
+      const lines = fileMatches[i].split("\n");
       const filePath = lines[0].trim();
       const code = lines.slice(1).join("\n").trim();
-      codeMap[filePath] = code;
+
+      // 다음 섹션까지만 추출 (### Test: 또는 ### File: 만나면 중단)
+      const nextSectionMatch = code.match(/^###\s+(Test|File):/m);
+      const finalCode = nextSectionMatch
+        ? code.substring(0, nextSectionMatch.index).trim()
+        : code;
+
+      codeMap[filePath] = finalCode;
+    }
+
+    // Test 항목도 파싱
+    const testMatches = content.split(/^### Test: /m);
+    for (let i = 1; i < testMatches.length; i++) {
+      const lines = testMatches[i].split("\n");
+      const filePath = lines[0].trim();
+      const code = lines.slice(1).join("\n").trim();
+
+      const nextSectionMatch = code.match(/^###\s+(Test|File):/m);
+      const finalCode = nextSectionMatch
+        ? code.substring(0, nextSectionMatch.index).trim()
+        : code;
+
+      codeMap[filePath] = finalCode;
     }
 
     return codeMap;

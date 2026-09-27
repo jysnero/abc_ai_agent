@@ -1,0 +1,32 @@
+{
+  "contract_id": "checkbox-v1",
+  "version": "1.0.0",
+  "request_spec_revision": "",
+  "target_files": [
+    "src/Checkbox.tsx",
+    "src/Checkbox.test.tsx",
+    "README.md"
+  ],
+  "bridge_usage": {},
+  "validation_commands": [
+    {
+      "check_id": "architecture",
+      "command": "node scripts/check-architecture.mjs"
+    },
+    {
+      "check_id": "tests",
+      "command": "npm test"
+    }
+  ],
+  "completion_criteria": {
+    "required_files_created": [
+      "src/Checkbox.tsx",
+      "src/Checkbox.test.tsx",
+      "README.md"
+    ],
+    "all_validation_pass": true,
+    "forbidden_patterns": "block_free"
+  },
+  "generated_at": "2026-09-27T04:03:52.997Z",
+  "generated_by": "plan_builder"
+}

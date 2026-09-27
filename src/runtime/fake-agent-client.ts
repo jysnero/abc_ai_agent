@@ -59,53 +59,199 @@ export class FakeAgentClient implements IAgentClient {
   }
 
   /**
-   * 정상 응답
+   * 정상 응답 (Checkbox 컴포넌트) - 마크다운 형식
    */
   private generateSuccessResponse(): AgentResponse {
+    const checkboxTsx = `import React, { useState } from 'react';
+
+export interface CheckboxProps {
+  checked?: boolean;
+  onChange?: (checked: boolean) => void;
+  label?: string;
+  disabled?: boolean;
+}
+
+export function Checkbox({
+  checked = false,
+  onChange,
+  label,
+  disabled = false,
+}: CheckboxProps): JSX.Element {
+  const [isChecked, setIsChecked] = useState(checked);
+
+  const handleChange = () => {
+    if (!disabled) {
+      const newState = !isChecked;
+      setIsChecked(newState);
+      onChange?.(newState);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === ' ' && !disabled) {
+      e.preventDefault();
+      handleChange();
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={isChecked}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        disabled={disabled}
+        aria-label={label || 'Checkbox'}
+        aria-checked={isChecked}
+        className="w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+      />
+      {label && (
+        <label className="text-sm font-medium cursor-pointer disabled:opacity-50">
+          {label}
+        </label>
+      )}
+    </div>
+  );
+}`;
+
+    const testFile = `import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/react';
+import { Checkbox } from './Checkbox';
+
+describe('Checkbox Component', () => {
+  it('renders checkbox element', () => {
+    const { container } = render(<Checkbox label="Test" />);
+    expect(container.querySelector('input[type="checkbox"]')).toBeInTheDocument();
+  });
+});`;
+
+    const readmeFile = `# Checkbox Component
+
+A reusable React checkbox component with TypeScript support and accessibility features.
+
+## Usage
+
+\`\`\`tsx
+import { Checkbox } from './src/Checkbox';
+
+export function App() {
+  const [checked, setChecked] = React.useState(false);
+  return (
+    <Checkbox
+      checked={checked}
+      onChange={setChecked}
+      label="Accept terms"
+    />
+  );
+}
+\`\`\`
+
+## Props
+
+- checked: boolean
+- onChange: (checked: boolean) => void
+- label: string
+- disabled: boolean
+`;
+
+    // Markdown format for developer agent parsing
+    const markdownContent = `## Checkbox Component
+
+### File: src/Checkbox.tsx
+${checkboxTsx}
+
+### Test: src/Checkbox.test.tsx
+${testFile}
+
+### File: README.md
+${readmeFile}
+
+All files generated successfully.`;
+
     return {
-      content: JSON.stringify({
-        status: "success",
-        generatedCode: {
-          "src/main.ts": "export function main() { console.log('Hello'); }",
-          "src/utils.ts": "export function util() { return 42; }",
-        },
-        testCode: {
-          "tests/main.test.ts": "test('main', () => { expect(true).toBe(true); });",
-        },
-        selfValidation: {
-          completeness: "yes",
-          coverage: ["src/main.ts", "src/utils.ts"],
-          missing: [],
-          issues: [],
-          notes: "All target files generated with proper type safety",
-        },
-      }),
+      content: markdownContent,
       stop_reason: "end_turn",
-      usage: { input_tokens: 500, output_tokens: 500 },
+      usage: { input_tokens: 500, output_tokens: 2000 },
     };
   }
 
   /**
-   * 검증 실패 응답
+   * 검증 실패 응답 (의도적인 타입 오류) - 마크다운 형식
    */
   private generateValidationFailureResponse(): AgentResponse {
+    const checkboxWithTypeError = `import React, { useState } from 'react';
+
+export interface CheckboxProps {
+  checked?: boolean;
+  onChange?: (checked: boolean) => void;
+  label?: string;
+  disabled?: boolean;
+}
+
+export function Checkbox({
+  checked = false,
+  onChange,
+  label,
+  disabled = false,
+}: CheckboxProps): JSX.Element {
+  const [isChecked, setIsChecked]: number = useState(checked); // TYPE ERROR
+
+  const handleChange = () => {
+    if (!disabled) {
+      const newState = !isChecked;
+      setIsChecked(newState);
+      onChange?.(newState);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={isChecked}
+        onChange={handleChange}
+        disabled={disabled}
+        aria-label={label || 'Checkbox'}
+        aria-checked={isChecked}
+      />
+    </div>
+  );
+}`;
+
+    const testFile = `import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/react';
+import { Checkbox } from './Checkbox';
+
+describe('Checkbox', () => {
+  it('renders', () => {
+    const { container } = render(<Checkbox />);
+    expect(container.querySelector('input')).toBeInTheDocument();
+  });
+});`;
+
+    const readmeFile = `# Checkbox Component
+
+Incomplete version with build error.
+`;
+
+    const markdownContent = `## Checkbox Component (With Errors)
+
+### File: src/Checkbox.tsx
+${checkboxWithTypeError}
+
+### Test: src/Checkbox.test.tsx
+${testFile}
+
+### File: README.md
+${readmeFile}
+
+Has TypeScript compilation errors.`;
+
     return {
-      content: JSON.stringify({
-        status: "success",
-        generatedCode: {
-          "src/main.ts": "export function main() { console.log('Hello'); }", // 타입 오류 포함
-        },
-        testCode: {},
-        selfValidation: {
-          completeness: "partial",
-          coverage: ["src/main.ts"],
-          missing: ["src/utils.ts"],
-          issues: ["TypeScript compilation error: Type mismatch"],
-          notes: "Missing some target files",
-        },
-      }),
+      content: markdownContent,
       stop_reason: "end_turn",
-      usage: { input_tokens: 500, output_tokens: 300 },
+      usage: { input_tokens: 500, output_tokens: 1000 },
     };
   }
 
@@ -113,19 +259,17 @@ export class FakeAgentClient implements IAgentClient {
    * 수정 실패 응답
    */
   private generateRepairFailureResponse(): AgentResponse {
+    const markdownContent = `## Repair Failed
+
+Maximum repair attempts exceeded. Unable to fix the code within constraints.
+
+### File: src/Checkbox.tsx
+// Unable to fix
+
+Cannot proceed.`;
+
     return {
-      content: JSON.stringify({
-        status: "failure",
-        generatedCode: {},
-        testCode: {},
-        selfValidation: {
-          completeness: "no",
-          coverage: [],
-          missing: ["all"],
-          issues: ["Cannot generate code within constraints"],
-          notes: "Maximum repair attempts exceeded",
-        },
-      }),
+      content: markdownContent,
       stop_reason: "end_turn",
       usage: { input_tokens: 500, output_tokens: 200 },
     };
@@ -135,22 +279,16 @@ export class FakeAgentClient implements IAgentClient {
    * 범위 초과 응답
    */
   private generateRangeExceededResponse(): AgentResponse {
+    const markdownContent = `## Generated Code
+
+### File: src/Checkbox.tsx
+export function Checkbox() { return null; }
+
+### File: src/unauthorized/new-file.ts
+// File outside contract`;
+
     return {
-      content: JSON.stringify({
-        status: "success",
-        generatedCode: {
-          "src/main.ts": "...",
-          "src/unauthorized/new-file.ts": "// New file outside execution plan",
-        },
-        testCode: {},
-        selfValidation: {
-          completeness: "yes",
-          coverage: ["src/main.ts", "src/unauthorized/new-file.ts"],
-          missing: [],
-          issues: [],
-          notes: "Added file outside architecture contract",
-        },
-      }),
+      content: markdownContent,
       stop_reason: "end_turn",
       usage: { input_tokens: 500, output_tokens: 400 },
     };
