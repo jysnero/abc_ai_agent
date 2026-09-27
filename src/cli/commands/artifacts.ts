@@ -1,6 +1,7 @@
 import { WorkflowRunner } from "../../workflow/workflow-runner.js";
 import { HumanFormatter, JsonFormatter } from "../output/formatter.js";
 import { CliError, ExitCode, RunNotFoundError } from "../cli-errors.js";
+import { InvalidRunIdFormatError, RunNotFoundError as StorageRunNotFoundError } from "../../storage/run-storage.js";
 
 export interface ArtifactsOptions {
   "run-id": string;
@@ -22,12 +23,11 @@ export async function artifactsCommand(
       : HumanFormatter.formatArtifacts(artifacts);
     return { output, exitCode: 0 };
   } catch (err) {
-    const errMsg = (err as Error).message;
-    if (errMsg.includes("Run not found")) {
-      throw new RunNotFoundError(errMsg);
+    if (err instanceof InvalidRunIdFormatError) {
+      throw new CliError((err as Error).message, ExitCode.CLI_ARGS_ERROR);
     }
-    if (errMsg.includes("Invalid run ID format")) {
-      throw new RunNotFoundError("Invalid run ID format");
+    if (err instanceof StorageRunNotFoundError) {
+      throw new RunNotFoundError((err as Error).message);
     }
     throw err;
   }

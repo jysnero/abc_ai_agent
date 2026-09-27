@@ -207,6 +207,16 @@ describe("CLI Integration Tests (Real Process)", () => {
     }
   });
 
+  test("status: invalid run ID format exits 2", () => {
+    const testRunDir = createTestRunDir();
+    try {
+      const { exitCode } = runCli(["status", "--run-id", "req-invalid-format"], testRunDir);
+      assert.equal(exitCode, 2, "Should exit with CLI_ARGS_ERROR (invalid format)");
+    } finally {
+      if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
+    }
+  });
+
   test("status: nonexistent run exits 4", () => {
     const testRunDir = createTestRunDir();
     try {
@@ -282,6 +292,16 @@ describe("CLI Integration Tests (Real Process)", () => {
     try {
       const { exitCode } = runCli(["approve-spec", "--run-id", "run-00000000-0000-0000-0000-000000000001"], testRunDir);
       assert.equal(exitCode, 2, "Should exit with CLI_ARGS_ERROR");
+    } finally {
+      if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
+    }
+  });
+
+  test("approve-spec: invalid run ID format exits 2", () => {
+    const testRunDir = createTestRunDir();
+    try {
+      const { exitCode } = runCli(["approve-spec", "--run-id", "req-invalid", "--approver", "alice"], testRunDir);
+      assert.equal(exitCode, 2, "Should exit with CLI_ARGS_ERROR (invalid format)");
     } finally {
       if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
     }
@@ -427,6 +447,16 @@ describe("CLI Integration Tests (Real Process)", () => {
     }
   });
 
+  test("artifacts: invalid run ID format exits 2", () => {
+    const testRunDir = createTestRunDir();
+    try {
+      const { exitCode } = runCli(["artifacts", "--run-id", "bad-format-id"], testRunDir);
+      assert.equal(exitCode, 2, "Should exit with CLI_ARGS_ERROR (invalid format)");
+    } finally {
+      if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
+    }
+  });
+
   test("artifacts: nonexistent run exits 4", () => {
     const testRunDir = createTestRunDir();
     try {
@@ -503,10 +533,20 @@ describe("CLI Integration Tests (Real Process)", () => {
     }
   });
 
-  test("exit code 2: CLI args error", () => {
+  test("exit code 2: CLI args error (missing required option)", () => {
     const testRunDir = createTestRunDir();
     try {
       const { exitCode } = runCli(["start"], testRunDir);
+      assert.equal(exitCode, 2);
+    } finally {
+      if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
+    }
+  });
+
+  test("exit code 2: CLI args error (invalid run ID format)", () => {
+    const testRunDir = createTestRunDir();
+    try {
+      const { exitCode } = runCli(["status", "--run-id", "invalid-format"], testRunDir);
       assert.equal(exitCode, 2);
     } finally {
       if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });

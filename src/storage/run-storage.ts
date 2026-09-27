@@ -22,6 +22,25 @@ import { RunMetadata, StateTransitionEvent, ArtifactMetadata } from "./run-stora
 const RUN_ID_PATTERN = /^run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
+ * Error classes for domain-specific failures
+ */
+export class InvalidRunIdFormatError extends Error {
+  readonly code = "INVALID_RUN_ID_FORMAT";
+  constructor(runId: string) {
+    super(`Invalid run ID format: ${runId}`);
+    this.name = "InvalidRunIdFormatError";
+  }
+}
+
+export class RunNotFoundError extends Error {
+  readonly code = "RUN_NOT_FOUND";
+  constructor(runId: string) {
+    super(`Run not found: ${runId}`);
+    this.name = "RunNotFoundError";
+  }
+}
+
+/**
  * Run 디렉토리 경로 동적 결정
  */
 function getRunsBaseDir(): string {
@@ -133,7 +152,7 @@ export async function initializeRun(
   requestSpec: string
 ): Promise<RunMetadata> {
   if (!validateRunId(runId)) {
-    throw new Error(`Invalid run ID format: ${runId}`);
+    throw new InvalidRunIdFormatError(runId);
   }
 
   const runDir = securePath(runId, ".");
@@ -197,13 +216,13 @@ export async function initializeRun(
  */
 export async function loadManifest(runId: string): Promise<RunMetadata> {
   if (!validateRunId(runId)) {
-    throw new Error(`Invalid run ID format: ${runId}`);
+    throw new InvalidRunIdFormatError(runId);
   }
 
   const manifestPath = securePath(runId, "manifest.json");
 
   if (!fs.existsSync(manifestPath)) {
-    throw new Error(`Run not found: ${runId}`);
+    throw new RunNotFoundError(runId);
   }
 
   const content = await fs.promises.readFile(manifestPath, "utf-8");
@@ -220,7 +239,7 @@ export async function saveArtifact(
   versionNumber: number = 1
 ): Promise<string> {
   if (!validateRunId(runId)) {
-    throw new Error(`Invalid run ID format: ${runId}`);
+    throw new InvalidRunIdFormatError(runId);
   }
 
   const checksum = calculateChecksum(content);
@@ -278,7 +297,7 @@ export async function loadArtifact(
   versionNumber: number = 1
 ): Promise<string | null> {
   if (!validateRunId(runId)) {
-    throw new Error(`Invalid run ID format: ${runId}`);
+    throw new InvalidRunIdFormatError(runId);
   }
 
   // 경로 기반 아티팩트 (예: "validation/initial") 지원
@@ -531,7 +550,7 @@ export async function incrementRetryCount(
  */
 export async function listArtifacts(runId: string): Promise<ArtifactMetadata[]> {
   if (!validateRunId(runId)) {
-    throw new Error(`Invalid run ID format: ${runId}`);
+    throw new InvalidRunIdFormatError(runId);
   }
 
   const manifest = await loadManifest(runId);
