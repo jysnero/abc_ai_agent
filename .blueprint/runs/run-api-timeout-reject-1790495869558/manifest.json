@@ -1,0 +1,21 @@
+{
+  "run_id": "run-api-timeout-reject-1790495869558",
+  "created_at": "2026-09-27T07:57:49.562Z",
+  "updated_at": "2026-09-27T07:57:49.564Z",
+  "status": "HUMAN_GATE_SPEC",
+  "initialization_status": "READY",
+  "retry_count": {
+    "arch": 0,
+    "dev_repair": 0
+  },
+  "spec_approval": {
+    "approved": true,
+    "approver": "test",
+    "timestamp": "2026-09-27T07:57:49.564Z",
+    "checksum": "sha256:test-checksum"
+  },
+  "events": [],
+  "request_spec_revision": "sha256:spec",
+  "architecture_contract_revision": "sha256:contract",
+  "execution_plan_revision": "sha256:plan"
+}

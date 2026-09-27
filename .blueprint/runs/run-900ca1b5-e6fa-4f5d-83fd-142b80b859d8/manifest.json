@@ -1,8 +1,8 @@
 {
   "run_id": "run-900ca1b5-e6fa-4f5d-83fd-142b80b859d8",
   "created_at": "2026-09-27T07:36:58.608Z",
-  "updated_at": "2026-09-27T07:36:58.653Z",
-  "status": "HUMAN_GATE_SPEC",
+  "updated_at": "2026-09-27T07:50:06.414Z",
+  "status": "DEV_VALIDATION_LOOP",
   "initialization_status": "READY",
   "retry_count": {
     "arch": 0,
@@ -38,6 +38,12 @@
       "from_state": "PLAN_BUILD",
       "to_state": "HUMAN_GATE_SPEC",
       "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T07:50:06.411Z",
+      "from_state": "HUMAN_GATE_SPEC",
+      "to_state": "DEV_VALIDATION_LOOP",
+      "triggered_by": "system"
     }
   ],
   "request_spec_revision": "sha256:cfd00e92d8b1ea36f22c9edf120510b53f9667590e4785a9cf3bb2f634fd6dbd",
@@ -51,7 +57,9 @@
         "architecture_contract": "sha256:d147b9fcd015af3175aec6c9d39c2ff4700666c102d848967451c2d146bd938d",
         "execution_plan": "sha256:2f4888df384cca35a90044dcfff6992bdfb543fb098b7ea7d5848bc3233b46b3"
       },
-      "created_at": "2026-09-27T07:36:58.650Z"
+      "created_at": "2026-09-27T07:36:58.650Z",
+      "approved_by": "user",
+      "approved_at": "2026-09-27T07:38:30.000Z"
     }
   }
 }

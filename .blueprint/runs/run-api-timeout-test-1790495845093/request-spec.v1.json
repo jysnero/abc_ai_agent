@@ -1,0 +1,14 @@
+{
+  "type": "webview-component",
+  "version": "1.0",
+  "name": "Test Component",
+  "requirement": {
+    "summary": "Test",
+    "details": []
+  },
+  "constraints": {},
+  "expected_files": {
+    "component": "src/App.tsx",
+    "test": "tests/test.tsx"
+  }
+}

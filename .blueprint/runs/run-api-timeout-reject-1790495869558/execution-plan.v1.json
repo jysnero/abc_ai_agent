@@ -1,0 +1,11 @@
+{
+  "contract_id": "test",
+  "version": "1.0.0",
+  "target_files": [
+    "src/App.tsx"
+  ],
+  "validation_commands": [],
+  "completion_criteria": {
+    "all_validation_pass": true
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "run_id": "run-api-timeout-test-1790495845093",
+  "created_at": "2026-09-27T07:57:25.097Z",
+  "updated_at": "2026-09-27T07:57:25.099Z",
+  "status": "HUMAN_GATE_SPEC",
+  "initialization_status": "READY",
+  "retry_count": {
+    "arch": 0,
+    "dev_repair": 0
+  },
+  "spec_approval": {
+    "approved": true,
+    "approver": "test",
+    "timestamp": "2026-09-27T07:57:25.099Z",
+    "checksum": "sha256:abc123"
+  },
+  "events": []
+}

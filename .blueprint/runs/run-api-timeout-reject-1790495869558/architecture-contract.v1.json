@@ -1,0 +1,15 @@
+{
+  "contract_id": "test",
+  "version": "1.0.0",
+  "pattern_type": "browser_component",
+  "folder_structure": {
+    "required_files": [
+      "src/App.tsx"
+    ]
+  },
+  "allowed_dependencies": {
+    "npm_packages": []
+  },
+  "bridge_policy": {},
+  "forbidden_patterns": []
+}

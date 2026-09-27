@@ -34,7 +34,6 @@ export class DeveloperAgent {
   private model: string;
 
   constructor(config: DeveloperAgentConfig = {}) {
-    console.log(`[Developer] Initializing with config: apiKey=${config.apiKey ? 'set' : 'unset'}, client=${config.client ? 'provided' : 'will-create'}`);
     this.client = config.client || createAgentClient({
       apiKey: config.apiKey,
       timeout_ms: 60000,
@@ -135,23 +134,6 @@ Generate files in this order:
     );
 
     const content = response.content;
-    console.log(`[Developer] generateCode response length: ${content.length}, preview: ${content.substring(0, 500)}`);
-
-    // Debug: Save full response to temp file
-    try {
-      const fs = await import("fs");
-      const os = await import("os");
-      const path = await import("path");
-      const tempDir = path.join(os.tmpdir(), "claude-debug");
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-      const tempFile = path.join(tempDir, `claude-response-${Date.now()}.txt`);
-      fs.writeFileSync(tempFile, content, "utf-8");
-      console.log(`[Developer] Full response saved to ${tempFile}`);
-    } catch (err) {
-      console.log(`[Developer] Failed to save debug response: ${err}`);
-    }
 
     // 파싱: "### File: <path>"와 "### Test: <path>" 모두 지원
     const codeMap: Record<string, string> = {};

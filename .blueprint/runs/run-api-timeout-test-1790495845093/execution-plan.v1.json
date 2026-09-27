@@ -1,0 +1,12 @@
+{
+  "contract_id": "req-test-run-api-timeout-test-1790495845093",
+  "version": "1.0.0",
+  "target_files": [
+    "src/App.tsx",
+    "tests/test.tsx"
+  ],
+  "validation_commands": [],
+  "completion_criteria": {
+    "all_validation_pass": true
+  }
+}

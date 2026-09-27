@@ -265,7 +265,46 @@ export class WorkflowRunner {
     const executionPlan = JSON.parse(planArtifact || "{}");
     const contract = JSON.parse(contractArtifact || "{}");
 
-    const devResult = await this.developerAgent.executeByPlan(executionPlan, contractArtifact || "");
+    let devResult;
+    try {
+      devResult = await this.developerAgent.executeByPlan(executionPlan, contractArtifact || "");
+    } catch (agentError) {
+      // API timeout 감지 및 처리
+      const errorMsg = (agentError as Error).message || String(agentError);
+      const isApiTimeout = errorMsg.includes("timed out") || errorMsg.includes("timeout");
+
+      if (isApiTimeout) {
+        // API timeout 진단 저장
+        const timeoutDiagnosis = {
+          error_type: "api_timeout",
+          error_message: errorMsg,
+          timestamp: new Date().toISOString(),
+          stage: "developer_execution",
+          config: {
+            timeout_ms: 60000,
+            max_retries: 0,
+            model: "claude-opus-5-5",
+          },
+          api_response: null,
+          usage: null,
+          stop_reason: null,
+        };
+
+        await saveArtifact(runId, "timeout-diagnosis", JSON.stringify(timeoutDiagnosis, null, 2));
+        console.log(`[WorkflowRunner] API timeout detected during Developer execution. Escalating to NEEDS_HUMAN_REVIEW.`);
+
+        // NEEDS_HUMAN_REVIEW 상태로 전환
+        await transitionState(runId, "NEEDS_HUMAN_REVIEW");
+        console.log(`[WorkflowRunner] transitioned to NEEDS_HUMAN_REVIEW due to API timeout`);
+
+        // 오류 반환 (후속 단계 중단)
+        throw new Error(`Agent execution timeout: ${errorMsg}. Saved to timeout-diagnosis artifact.`);
+      }
+
+      // API timeout이 아닌 다른 오류는 그대로 전파
+      throw agentError;
+    }
+
     const devResultJson = JSON.stringify(devResult, null, 2);
 
     // Developer result 초기값 저장 (artifacts에 저장)

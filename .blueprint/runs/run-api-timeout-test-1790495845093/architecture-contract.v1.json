@@ -1,0 +1,18 @@
+{
+  "contract_id": "req-test-run-api-timeout-test-1790495845093",
+  "version": "1.0.0",
+  "pattern_type": "browser_component",
+  "folder_structure": {
+    "required_files": [
+      "src/App.tsx",
+      "tests/test.tsx"
+    ]
+  },
+  "allowed_dependencies": {
+    "npm_packages": [
+      "react@^18.0.0"
+    ]
+  },
+  "bridge_policy": {},
+  "forbidden_patterns": []
+}
