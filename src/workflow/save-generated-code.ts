@@ -72,8 +72,9 @@ export async function saveGeneratedCode(options: SaveCodeOptions): Promise<{
     }
   }
 
-  // 4. 필수 파일 검증
-  const missingFiles = requiredFiles.filter(f => !savedFiles.includes(f));
+  // 4. 필수 파일 검증 (경로 정규화 후 비교)
+  const normalizedRequired = requiredFiles.map(f => path.normalize(f));
+  const missingFiles = normalizedRequired.filter(f => !savedFiles.includes(f));
   if (missingFiles.length > 0) {
     errors.push(`Missing required files: ${missingFiles.join(", ")}`);
   }
