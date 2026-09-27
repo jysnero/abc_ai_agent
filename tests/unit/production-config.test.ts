@@ -12,7 +12,7 @@ import { toExternalAgentMode } from "../../src/cli/output/formatter.js";
 import { ClaudeAgentClient } from "../../src/runtime/claude-agent-client.js";
 import { FakeAgentClient } from "../../src/runtime/fake-agent-client.js";
 import { buildExecutionPlan } from "../../src/builders/plan-builder.js";
-import type { DeveloperAgent } from "../../src/agents/developer.js";
+import { parseFileSections, type DeveloperAgent } from "../../src/agents/developer.js";
 
 const contractText = fs.readFileSync(
   path.resolve("contracts/examples/ox-quiz-browser-contract.json"),
@@ -54,7 +54,8 @@ function installFetch(replies: Reply[]) {
   }) as typeof fetch;
 }
 
-const allTargets = plan.target_files.map((f) => `### File: ${f}\nexport {};\n`).join("\n");
+const allTargets = ["src/App.tsx", "src/types.ts"].map((f) => `### File: ${f}\n\`\`\`tsx\nexport {};\n\`\`\`\n`).join("\n");
+const testReply = "### Test: tests/Quiz.test.tsx\n```tsx\nexport {};\n```";
 
 function agent(): DeveloperAgent {
   return (createCliDependencies(false, { singleTrial: true }).workflowRunner as any).developerAgent as DeveloperAgent;
@@ -117,10 +118,13 @@ describe("Production agent config (CLI real-API mode)", () => {
   });
 
   it("success path: 3 requests (1 per step) with model/max_tokens in request body", async () => {
-    installFetch([{ text: allTargets }, { text: "### Test: tests/Extra.test.tsx\nexport {};" }, { text: "{}" }]);
+    installFetch([{ text: allTargets }, { text: testReply }, { text: "{}" }]);
     const result = await agent().executeByPlan(plan, contractText);
     assert.equal(result.status, "success");
     assert.equal(requests.length, 3);
+    assert.deepEqual(Object.keys(result.generatedCode).sort(), ["src/App.tsx", "src/types.ts"]);
+    assert.deepEqual(Object.keys(result.testCode), ["tests/Quiz.test.tsx"]);
+    assert.equal(result.generatedCode["src/App.tsx"], "export {};\n", "code fence must be stripped");
     assert.deepEqual(result.steps.map((s) => s.step), ["generateCode", "generateTests", "selfValidate"]);
     for (const r of requests) assert.deepEqual(r, { model: "claude-opus-5-5", max_tokens: 8192 });
   });
@@ -151,6 +155,31 @@ describe("Production agent config (CLI real-API mode)", () => {
     assert.equal(result.status, "failure");
     assert.equal(requests.length, 1);
     assert.equal(result.steps[0].outcome, "incomplete");
+  });
+
+  it("step 2 missing its test file: stops before step 3", async () => {
+    installFetch([{ text: allTargets }, { text: "### Test: tests/Other.test.tsx\nexport {};" }]);
+    const result = await agent().executeByPlan(plan, contractText);
+    assert.equal(result.status, "failure");
+    assert.equal(requests.length, 2);
+    assert.deepEqual(result.steps.map((s) => s.outcome), ["ok", "incomplete"]);
+  });
+
+  it("unterminated extra section with end_turn: step is incomplete, not success-with-file-dropped", async () => {
+    installFetch([{ text: `${allTargets}\n### File: src/extra.ts\n\`\`\`ts\nexport const x = (` }]);
+    const result = await agent().executeByPlan(plan, contractText);
+    assert.equal(result.status, "failure");
+    assert.equal(requests.length, 1);
+    assert.equal(result.steps[0].outcome, "incomplete");
+    assert.match(result.steps[0].error ?? "", /unterminated code block: src\/extra\.ts/);
+  });
+
+  it("parser: strips wrapping fence, excludes unterminated (truncated) section", () => {
+    const { files, unterminated } = parseFileSections(
+      "### File: a.ts\n```ts\nconst a = 1;\n```\n\n### File: b.ts\n```ts\nconst b = ("
+    );
+    assert.deepEqual(files, { "a.ts": "const a = 1;\n" });
+    assert.deepEqual(unterminated, ["b.ts"]);
   });
 
   it("incomplete response at step 2: 2 requests total, step 3 not called", async () => {

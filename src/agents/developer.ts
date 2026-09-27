@@ -44,6 +44,42 @@ export interface DeveloperAgentResult {
 
 class IncompleteResponseError extends Error {}
 
+export function isTestFile(filePath: string): boolean {
+  return /(^|\/)tests?\//.test(filePath) || /\.test\.[jt]sx?$/.test(filePath);
+}
+
+export function splitTargetFiles(files: string[]): { sourceFiles: string[]; testFiles: string[] } {
+  return {
+    sourceFiles: files.filter((f) => !isTestFile(f)),
+    testFiles: files.filter((f) => isTestFile(f)),
+  };
+}
+
+/**
+ * "### File: <path>" / "### Test: <path>" 섹션 파싱.
+ * 섹션 전체를 감싼 코드블록(```lang ... ```)은 제거하고, 닫히지 않은 코드블록(잘린 응답)은 files에서 제외한다.
+ */
+export function parseFileSections(content: string): { files: Record<string, string>; unterminated: string[] } {
+  const files: Record<string, string> = {};
+  const unterminated: string[] = [];
+  const parts = content.split(/^### (?:File|Test): /m);
+  for (let i = 1; i < parts.length; i++) {
+    const lines = parts[i].split("\n");
+    const filePath = lines[0].trim();
+    let body = lines.slice(1).join("\n").trim();
+    if (/^```[\w-]*[ \t]*(\r?\n|$)/.test(body)) {
+      const closing = body.lastIndexOf("\n```");
+      if (closing < 0 || body.slice(closing + 4).trim() !== "") {
+        unterminated.push(filePath);
+        continue;
+      }
+      body = body.slice(body.indexOf("\n") + 1, closing);
+    }
+    files[filePath] = body.replace(/\s+$/, "") + "\n";
+  }
+  return { files, unterminated };
+}
+
 export class DeveloperAgent {
   private client: IAgentClient;
   private model: string;
@@ -130,21 +166,18 @@ export class DeveloperAgent {
     };
 
     try {
-      // Step 1: 코드 생성
-      console.log(`\n📝 Step 1: 코드 생성 (${executionPlan.target_files.length} 파일)`);
-      result.generatedCode = await this.generateCode(executionPlan, architectureContract);
+      // 단계별 담당 파일: generateCode = 앱 소스, generateTests = 테스트 (최종 required_files 전체는 저장 단계에서 검사)
+      const { sourceFiles, testFiles } = splitTargetFiles(executionPlan.target_files);
 
-      const missing = executionPlan.target_files.filter((f) => !(f in result.generatedCode));
-      if (missing.length > 0) {
-        const last = this.steps[this.steps.length - 1];
-        last.outcome = "incomplete";
-        last.error = `missing target files: ${missing.join(", ")}`;
-        throw new IncompleteResponseError(`generateCode: missing target files: ${missing.join(", ")}`);
-      }
+      // Step 1: 코드 생성
+      console.log(`\n📝 Step 1: 코드 생성 (${sourceFiles.length} 파일)`);
+      result.generatedCode = await this.generateCode(executionPlan, architectureContract, sourceFiles);
+      this.requireFiles("generateCode", sourceFiles, result.generatedCode);
 
       // Step 2: 테스트 생성
-      console.log(`\n🧪 Step 2: 테스트 생성`);
-      result.testCode = await this.generateTests(executionPlan, result.generatedCode);
+      console.log(`\n🧪 Step 2: 테스트 생성 (${testFiles.length} 파일)`);
+      result.testCode = await this.generateTests(executionPlan, result.generatedCode, testFiles);
+      this.requireFiles("generateTests", testFiles, result.testCode);
 
       // Step 3: 자기 검증
       console.log(`\n✅ Step 3: 자기 검증`);
@@ -160,14 +193,33 @@ export class DeveloperAgent {
     }
   }
 
+  // 잘린 섹션이 하나라도 있으면 해당 파일을 빼고 성공 처리하지 않음
+  private rejectUnterminated(step: DeveloperStep, unterminated: string[]): void {
+    if (unterminated.length === 0) return;
+    const last = this.steps[this.steps.length - 1];
+    last.outcome = "incomplete";
+    last.error = `unterminated code block: ${unterminated.join(", ")}`;
+    throw new IncompleteResponseError(`${step}: unterminated code block: ${unterminated.join(", ")}`);
+  }
+
+  private requireFiles(step: DeveloperStep, required: string[], produced: Record<string, string>): void {
+    const missing = required.filter((f) => !(f in produced));
+    if (missing.length === 0) return;
+    const last = this.steps[this.steps.length - 1];
+    last.outcome = "incomplete";
+    last.error = `missing files: ${missing.join(", ")}`;
+    throw new IncompleteResponseError(`${step}: missing files: ${missing.join(", ")}`);
+  }
+
   /**
-   * Step 1: 코드 생성 (### File:과 ### Test: 모두 파싱)
+   * Step 1: 앱 소스 코드 생성 (테스트 파일 제외)
    */
   private async generateCode(
     plan: ExecutionPlan,
-    contractStr: string
+    contractStr: string,
+    sourceFiles: string[]
   ): Promise<Record<string, string>> {
-    const fileList = plan.target_files.map((f) => `- ${f}`).join("\n");
+    const fileList = sourceFiles.map((f) => `- ${f}`).join("\n");
     const platformFiles = plan.platform_files || [];
     const platformSection = platformFiles.length > 0
       ? `
@@ -183,7 +235,7 @@ You are a developer implementing a WebView service according to an execution pla
 
 ## Execution Plan
 - Contract ID: ${plan.contract_id}
-- Target Files (generate exactly these, ALL of them):
+- Source Files (generate exactly these, ALL of them):
 ${fileList}
 - Bridge Usage: ${JSON.stringify(plan.bridge_usage)}
 ${platformSection}
@@ -191,48 +243,16 @@ ${platformSection}
 ${contractStr}
 
 ## Task
-Generate COMPLETE, production-ready code for EACH target file listed above. Do not skip any files.
+Generate COMPLETE, production-ready code for EACH source file listed above. Do not skip any files.
+Do NOT write test files; tests are generated in a separate step.
 
 Output format: For each file, start with "### File: <path>" on a new line, then the complete file content.
 `;
 
     const content = await this.callStep("generateCode", prompt, "You are a professional TypeScript developer.");
-
-    // 파싱: "### File: <path>"와 "### Test: <path>" 모두 지원
-    const codeMap: Record<string, string> = {};
-
-    // File 항목 파싱
-    const fileMatches = content.split(/^### File: /m);
-    for (let i = 1; i < fileMatches.length; i++) {
-      const lines = fileMatches[i].split("\n");
-      const filePath = lines[0].trim();
-      const code = lines.slice(1).join("\n").trim();
-
-      // 다음 섹션까지만 추출 (### Test: 또는 ### File: 만나면 중단)
-      const nextSectionMatch = code.match(/^###\s+(Test|File):/m);
-      const finalCode = nextSectionMatch
-        ? code.substring(0, nextSectionMatch.index).trim()
-        : code;
-
-      codeMap[filePath] = finalCode;
-    }
-
-    // Test 항목도 파싱
-    const testMatches = content.split(/^### Test: /m);
-    for (let i = 1; i < testMatches.length; i++) {
-      const lines = testMatches[i].split("\n");
-      const filePath = lines[0].trim();
-      const code = lines.slice(1).join("\n").trim();
-
-      const nextSectionMatch = code.match(/^###\s+(Test|File):/m);
-      const finalCode = nextSectionMatch
-        ? code.substring(0, nextSectionMatch.index).trim()
-        : code;
-
-      codeMap[filePath] = finalCode;
-    }
-
-    return codeMap;
+    const { files, unterminated } = parseFileSections(content);
+    this.rejectUnterminated("generateCode", unterminated);
+    return Object.fromEntries(Object.entries(files).filter(([p]) => !isTestFile(p)));
   }
 
   /**
@@ -240,7 +260,8 @@ Output format: For each file, start with "### File: <path>" on a new line, then 
    */
   private async generateTests(
     plan: ExecutionPlan,
-    generatedCode: Record<string, string>
+    generatedCode: Record<string, string>,
+    testFiles: string[]
   ): Promise<Record<string, string>> {
     const codeStr = Object.entries(generatedCode)
       .map(([path, code]) => `File: ${path}\n${code}`)
@@ -259,7 +280,9 @@ Write comprehensive test cases covering:
 3. Edge cases
 
 Output format: For each test file, start with "### Test: <path>" on a new line, then the test code.
-Target files should be in tests/ directory with similar structure.
+${testFiles.length > 0
+  ? `Test Files (generate exactly these, ALL of them):\n${testFiles.map((f) => `- ${f}`).join("\n")}`
+  : "Target files should be in tests/ directory with similar structure."}
 ${plan.platform_files?.length ? 'Use vitest (import { describe, it, expect, vi } from "vitest") with @testing-library/react (jsdom, jest-dom matchers preloaded). Import the component from "../src/App".' : ""}
 `;
 
@@ -268,25 +291,9 @@ ${plan.platform_files?.length ? 'Use vitest (import { describe, it, expect, vi }
       prompt,
       "You are an experienced QA engineer writing comprehensive tests."
     );
-
-    const testMap: Record<string, string> = {};
-    const matches = content.split(/^### Test: /m);
-
-    for (let i = 1; i < matches.length; i++) {
-      const lines = matches[i].split("\n");
-      const filePath = lines[0].trim();
-      let code = lines.slice(1).join("\n").trim();
-
-      // 다음 섹션까지만 추출 (### File: 또는 ### Test: 만나면 중단)
-      const nextSectionMatch = code.match(/^###\s+(Test|File):/m);
-      if (nextSectionMatch) {
-        code = code.substring(0, nextSectionMatch.index).trim();
-      }
-
-      testMap[filePath] = code;
-    }
-
-    return testMap;
+    const { files, unterminated } = parseFileSections(content);
+    this.rejectUnterminated("generateTests", unterminated);
+    return Object.fromEntries(Object.entries(files).filter(([p]) => isTestFile(p)));
   }
 
   /**

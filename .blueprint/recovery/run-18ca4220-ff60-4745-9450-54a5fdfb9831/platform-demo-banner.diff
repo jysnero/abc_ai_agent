@@ -1,0 +1,12 @@
+--- templates/browser_component/demo/index.html	2026-09-27 22:37:00.098061500 +0900
++++ .blueprint/workspace/recovery-run-18ca4220-ff60-4745-9450-54a5fdfb9831/demo/index.html	2026-09-27 23:10:51.193669900 +0900
+@@ -7,6 +7,9 @@
+   <script src="https://cdn.tailwindcss.com"></script>
+ </head>
+ <body class="bg-gray-50 font-sans">
++  <div role="note" data-testid="recovery-banner" style="position:sticky;top:0;z-index:50;background:#fef3c7;color:#92400e;border-bottom:2px solid #f59e0b;padding:8px 12px;font-weight:700;text-align:center;">
++    저장된 생성 코드 복구 Preview — 테스트 검증 미완료
++  </div>
+   <div id="root"></div>
+   <script type="module" src="./dist/app.js"></script>
+ </body>

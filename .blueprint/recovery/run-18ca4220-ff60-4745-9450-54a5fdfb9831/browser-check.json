@@ -1,0 +1,71 @@
+(node:3056) [UNDICI-WS] Warning: WebSockets are experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{
+  "steps": [
+    {
+      "url": "/demo/index.html",
+      "banner": "저장된 생성 코드 복구 Preview — 테스트 검증 미완료"
+    },
+    {
+      "header": "Question 1 of 5",
+      "statement": "Water boils at 100°C at sea level.",
+      "clicked": "O (True)",
+      "result": "clicked",
+      "score_after": "1"
+    },
+    {
+      "header": "Question 2 of 5",
+      "statement": "The Great Wall of China is visible from the Moon with the naked eye.",
+      "clicked": "X (False)",
+      "result": "clicked",
+      "score_after": "2"
+    },
+    {
+      "header": "Question 3 of 5",
+      "statement": "An octopus has three hearts.",
+      "clicked": "O (True)",
+      "result": "clicked",
+      "score_after": "3"
+    },
+    {
+      "header": "Question 4 of 5",
+      "statement": "Lightning never strikes the same place twice.",
+      "clicked": "X (False)",
+      "result": "clicked",
+      "score_after": "4"
+    },
+    {
+      "header": "Question 5 of 5",
+      "statement": "The Pacific Ocean is the largest ocean on Earth.",
+      "clicked": "O (True)",
+      "result": "clicked",
+      "score_after": "5"
+    }
+  ],
+  "questions_seen": 5,
+  "duplicate_check": {
+    "buttons_disabled_after_answer": [
+      true,
+      true
+    ],
+    "feedback": "Correct!",
+    "score_before_retry_clicks": "1",
+    "score_after_retry_clicks": "1"
+  },
+  "final": {
+    "final_score": "5 / 5",
+    "has_result_heading": true,
+    "summary_line": "100% — Perfect score! Outstanding!"
+  },
+  "restart": {
+    "header": "Question 1 of 5",
+    "score": "0",
+    "feedback_visible": false,
+    "buttons_enabled": true
+  },
+  "mobile": {
+    "viewport": 320,
+    "scrollWidth": 320,
+    "horizontal_overflow": false
+  }
+}

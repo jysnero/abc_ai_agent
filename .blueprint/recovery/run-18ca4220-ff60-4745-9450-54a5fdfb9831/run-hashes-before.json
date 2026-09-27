@@ -1,0 +1,8 @@
+{
+  "architecture-contract.v1.json": "sha256:180845aac1064fad0b96b30fced26f881a0e88cddf23f6ffc62739ee826057ab",
+  "developer-result-initial.v1.json": "sha256:07504e6fb7da8dda1988e2661256e69c0e774fa6a5e891f595559f326b819d11",
+  "execution-config.v1.json": "sha256:12dc453d8eb97812f53b93b0dcc242b1033646fa2ba91005bd952ed85964b7c0",
+  "execution-plan.v1.json": "sha256:92af76b2f97620f37e3d931d3638a84d0cacb6d1aa109ea242e9f811f6cd273e",
+  "manifest.json": "sha256:9a63092b729cb95376f526c8aa111b72c5b06c39943d9bc4473355bc8e0fef64",
+  "request-spec.v1.json": "sha256:cfd00e92d8b1ea36f22c9edf120510b53f9667590e4785a9cf3bb2f634fd6dbd"
+}

@@ -1,0 +1,102 @@
+### File: tests/Quiz.test.tsx
+```tsx
+import React from "react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import App, { DEFAULT_QUESTIONS, createInitialState, quizReducer } from "../src/App";
+import type { QuizQuestion } from "../src/types";
+
+const QUESTIONS: QuizQuestion[] = [
+  { id: "a", statement: "The sky is blue on a clear day.", answer: true, explanation: "Rayleigh scattering." },
+  { id: "b", statement: "Fish can climb trees easily.", answer: false, explanation: "Most fish cannot." },
+];
+
+const oButton = () => screen.getByRole("button", { name: "O (True)" });
+const xButton = () => screen.getByRole("button", { name: "X (False)" });
+
+describe("OX Quiz App", () => {
+  it("renders the first question and progress", () => {
+    render(<App questions={QUESTIONS} />);
+    expect(screen.getByText("The sky is blue on a clear day.")).toBeInTheDocument();
+    expect(screen.getByText("Question 1 of 2")).toBeInTheDocument();
+    expect(oButton()).toBeEnabled();
+    expect(xButton()).toBeEnabled();
+  });
+
+  it("shows correct feedback and explanation for a correct answer", () => {
+    render(<App questions={QUESTIONS} />);
+    fireEvent.click(oButton());
+    expect(screen.getByRole("status")).toHaveTextContent("Correct!");
+    expect(screen.getByText("Rayleigh scattering.")).toBeInTheDocument();
+    expect(screen.getByText("The answer is O.")).toBeInTheDocument();
+    expect(screen.getByText("Score: 1")).toBeInTheDocument();
+  });
+
+  it("shows incorrect feedback for a wrong answer", () => {
+    render(<App questions={QUESTIONS} />);
+    fireEvent.click(xButton());
+    expect(screen.getByRole("status")).toHaveTextContent("Incorrect");
+    expect(screen.getByText("Score: 0")).toBeInTheDocument();
+  });
+
+  it("disables answer buttons after answering", () => {
+    render(<App questions={QUESTIONS} />);
+    fireEvent.click(oButton());
+    expect(oButton()).toBeDisabled();
+    expect(xButton()).toBeDisabled();
+  });
+
+  it("advances to the next question", () => {
+    render(<App questions={QUESTIONS} />);
+    fireEvent.click(oButton());
+    fireEvent.click(screen.getByRole("button", { name: "Next Question" }));
+    expect(screen.getByText("Fish can climb trees easily.")).toBeInTheDocument();
+    expect(screen.getByText("Question 2 of 2")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows final score, calls onComplete, and restarts", () => {
+    const onComplete = vi.fn();
+    render(<App questions={QUESTIONS} onComplete={onComplete} />);
+    fireEvent.click(oButton()); // correct
+    fireEvent.click(screen.getByRole("button", { name: "Next Question" }));
+    fireEvent.click(oButton()); // incorrect
+    fireEvent.click(screen.getByRole("button", { name: "See Results" }));
+
+    expect(screen.getByText("Quiz Complete")).toBeInTheDocument();
+    expect(screen.getByTestId("final-score")).toHaveTextContent("1 / 2");
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledWith(1, 2, expect.any(Array));
+
+    fireEvent.click(screen.getByRole("button", { name: "Restart Quiz" }));
+    expect(screen.getByText("Question 1 of 2")).toBeInTheDocument();
+    expect(screen.getByText("Score: 0")).toBeInTheDocument();
+  });
+
+  it("supports keyboard shortcuts", () => {
+    render(<App questions={QUESTIONS} />);
+    fireEvent.keyDown(window, { key: "o" });
+    expect(screen.getByRole("status")).toHaveTextContent("Correct!");
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByText("Question 2 of 2")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "X" });
+    expect(screen.getByRole("status")).toHaveTextContent("Correct!");
+  });
+
+  it("handles an empty question set", () => {
+    render(<App questions={[]} />);
+    expect(screen.getByText("No questions available.")).toBeInTheDocument();
+  });
+
+  it("renders default questions when none are provided", () => {
+    render(<App />);
+    expect(screen.getByText(DEFAULT_QUESTIONS[0].statement)).toBeInTheDocument();
+    expect(screen.getByText(`Question 1 of ${DEFAULT_QUESTIONS.length}`)).toBeInTheDocument();
+  });
+});
+
+describe("quizReducer", () => {
+  it("ignores duplicate answers and invalid NEXT", () => {
+    let state = createInitialState(QUESTIONS);
+    expect(quizReducer(state, { type: "NEXT" })).toBe(state);
+    state = quizReducer(state, { type: "ANSWER", choice: "O" });

@@ -1,0 +1,35 @@
+{
+  "label": "저장된 생성 코드 복구 Preview — 테스트 검증 미완료",
+  "source_run": "run-18ca4220-ff60-4745-9450-54a5fdfb9831",
+  "source_run_status": "NEEDS_HUMAN_REVIEW",
+  "source_run_unchanged": true,
+  "source_response": {
+    "artifact": "developer-result-initial.v1.json",
+    "step": "generateCode",
+    "stop_reason": "max_tokens"
+  },
+  "extracted_unmodified": {
+    "src/types.ts": "sha256:c4eefe958167c909209495c444e60175c78286661218ef2401224b475c715ded",
+    "src/App.tsx": "sha256:658e411bceff41fe8826cddbcc199c5c00c0e9bf9c8443fd6be2cee38f7f7bc1"
+  },
+  "excluded": {
+    "tests/Quiz.test.tsx": "unterminated code block (truncated); kept only as extracted/Quiz.test.tsx.truncated.txt"
+  },
+  "modified_files": {
+    "demo/index.html": "platform file: recovery banner added (platform-demo-banner.diff)"
+  },
+  "generated_source_modifications": "none",
+  "checks": {
+    "tsc_strict": "passed",
+    "build": "passed",
+    "architecture": "failed: required file missing tests/Quiz.test.tsx only",
+    "tests": "not run (no valid test file)"
+  },
+  "spec_mismatches": [
+    "5 questions (spec: 3)",
+    "score = correct count, max 5 (spec: 10 points each, max 30)"
+  ],
+  "workspace": ".blueprint/workspace/recovery-run-18ca4220-ff60-4745-9450-54a5fdfb9831",
+  "api_calls": 0,
+  "created_at": "2026-09-27T14:12:25.528Z"
+}

@@ -1,0 +1,16 @@
+{
+  "agent": {
+    "model": "claude-opus-5-5",
+    "max_tokens": 8192,
+    "timeout_ms": 180000,
+    "app_max_retries": 0,
+    "sdk_max_retries": 0
+  },
+  "max_repair_attempts": 0,
+  "developer_steps": [
+    "generateCode",
+    "generateTests",
+    "selfValidate"
+  ],
+  "recorded_at": "2026-09-27T14:01:38.666Z"
+}

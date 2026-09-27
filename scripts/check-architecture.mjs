@@ -427,6 +427,8 @@ async function main() {
   const result = await validator.validate();
   if (workspaceDir) {
     validator.validateWorkspace(workspaceDir, ignoreGlobs);
+    const ws = result.details.workspaceValidation;
+    if (ws) console.log(`Scanned files: ${ws.scanned_files}\n`);
   }
 
   // Output results
