@@ -1,6 +1,7 @@
 import { WorkflowRunner } from "../../workflow/workflow-runner.js";
 import { HumanFormatter, JsonFormatter } from "../output/formatter.js";
-import { CliError, ExitCode } from "../cli-errors.js";
+import { CliError, ExitCode, RunNotFoundError, InvalidStateError, InvalidWorkflowStateError } from "../cli-errors.js";
+import { InvalidRunIdFormatError, RunNotFoundError as StorageRunNotFoundError } from "../../storage/run-storage.js";
 
 export interface ApproveReleaseOptions {
   "run-id": string;
@@ -32,11 +33,14 @@ export async function approveReleaseCommand(
       : `✓ Release approved: ${releaseId}`;
     return { output, exitCode: 0 };
   } catch (err) {
-    if ((err as Error).message.includes("not found")) {
-      throw new CliError("Run not found", ExitCode.RUN_NOT_FOUND_ERROR);
+    if (err instanceof InvalidRunIdFormatError) {
+      throw new CliError((err as Error).message, ExitCode.CLI_ARGS_ERROR);
     }
-    if ((err as Error).message.includes("Cannot approve")) {
-      throw new CliError((err as Error).message, ExitCode.INVALID_STATE_ERROR);
+    if (err instanceof StorageRunNotFoundError) {
+      throw new RunNotFoundError((err as Error).message);
+    }
+    if (err instanceof InvalidWorkflowStateError) {
+      throw new InvalidStateError((err as Error).message);
     }
     throw err;
   }

@@ -45,3 +45,19 @@ export class ApprovalMismatchError extends CliError {
     super(message, ExitCode.APPROVAL_MISMATCH_ERROR);
   }
 }
+
+export class InvalidWorkflowStateError extends Error {
+  readonly code = "INVALID_WORKFLOW_STATE";
+  constructor(public readonly state: string, message: string) {
+    super(message);
+    this.name = "InvalidWorkflowStateError";
+  }
+}
+
+export class DuplicateApprovalError extends Error {
+  readonly code = "DUPLICATE_APPROVAL";
+  constructor(public readonly approver: string, message: string) {
+    super(message);
+    this.name = "DuplicateApprovalError";
+  }
+}

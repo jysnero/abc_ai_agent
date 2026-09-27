@@ -141,14 +141,18 @@ export class WorkflowRunner {
     // Run 상태 검증
     const manifest = await loadManifest(runId);
     if (manifest.status !== "HUMAN_GATE_SPEC") {
-      throw new Error(
+      const { InvalidWorkflowStateError } = await import("../cli/cli-errors.js");
+      throw new InvalidWorkflowStateError(
+        manifest.status,
         `Cannot approve spec in state ${manifest.status}. Current state must be HUMAN_GATE_SPEC.`
       );
     }
 
     // 중복 승인 검증
     if (manifest.spec_approval) {
-      throw new Error(
+      const { DuplicateApprovalError } = await import("../cli/cli-errors.js");
+      throw new DuplicateApprovalError(
+        manifest.spec_approval.approver,
         `Spec has already been approved by ${manifest.spec_approval.approver}. ` +
         `Cannot approve twice in the same HUMAN_GATE_SPEC state.`
       );
@@ -434,7 +438,9 @@ export class WorkflowRunner {
 
     const manifest = await loadManifest(runId);
     if (manifest.status !== "HUMAN_GATE_RELEASE") {
-      throw new Error(
+      const { InvalidWorkflowStateError } = await import("../cli/cli-errors.js");
+      throw new InvalidWorkflowStateError(
+        manifest.status,
         `Cannot approve release in state ${manifest.status}. Current state must be HUMAN_GATE_RELEASE.`
       );
     }

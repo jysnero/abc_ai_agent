@@ -1,6 +1,6 @@
 import { WorkflowRunner } from "../../workflow/workflow-runner.js";
 import { HumanFormatter, JsonFormatter } from "../output/formatter.js";
-import { CliError, ExitCode, RunNotFoundError, InvalidStateError } from "../cli-errors.js";
+import { CliError, ExitCode, RunNotFoundError, InvalidStateError, InvalidWorkflowStateError, DuplicateApprovalError } from "../cli-errors.js";
 import { InvalidRunIdFormatError, RunNotFoundError as StorageRunNotFoundError } from "../../storage/run-storage.js";
 
 export interface ApproveSpecOptions {
@@ -39,7 +39,7 @@ export async function approveSpecCommand(
     if (err instanceof StorageRunNotFoundError) {
       throw new RunNotFoundError((err as Error).message);
     }
-    if ((err as Error).message.includes("Cannot approve") || (err as Error).message.includes("already been approved")) {
+    if (err instanceof InvalidWorkflowStateError || err instanceof DuplicateApprovalError) {
       throw new InvalidStateError((err as Error).message);
     }
     throw err;
