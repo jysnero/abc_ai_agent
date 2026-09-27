@@ -1,0 +1,79 @@
+{
+  "run_id": "run-bed1264d-4905-46e7-8407-3fab7503ea5a",
+  "created_at": "2026-09-27T04:53:01.538Z",
+  "updated_at": "2026-09-27T04:53:22.671Z",
+  "status": "HUMAN_GATE_RELEASE",
+  "initialization_status": "READY",
+  "retry_count": {
+    "arch": 0,
+    "dev_repair": 0
+  },
+  "events": [
+    {
+      "timestamp": "2026-09-27T04:53:01.538Z",
+      "from_state": "INITIAL",
+      "to_state": "PLANNING",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T04:53:01.557Z",
+      "from_state": "PLANNING",
+      "to_state": "DESIGN",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T04:53:01.559Z",
+      "from_state": "DESIGN",
+      "to_state": "ARCH_CONTRACT",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T04:53:01.562Z",
+      "from_state": "ARCH_CONTRACT",
+      "to_state": "PLAN_BUILD",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T04:53:01.577Z",
+      "from_state": "PLAN_BUILD",
+      "to_state": "HUMAN_GATE_SPEC",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T04:53:15.973Z",
+      "from_state": "HUMAN_GATE_SPEC",
+      "to_state": "DEV_VALIDATION_LOOP",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T04:53:22.671Z",
+      "from_state": "DEV_VALIDATION_LOOP",
+      "to_state": "HUMAN_GATE_RELEASE",
+      "triggered_by": "system"
+    }
+  ],
+  "request_spec_revision": "sha256:1705d3543c439407fb45ab594c9c051e2774afd62ba411161f4b1f1520683237",
+  "architecture_contract_revision": "sha256:9e2867c663b1293d78fc46c966966e912b261a07ca47a6ef1db554790ca0dd29",
+  "execution_plan_revision": "sha256:324da389b67c3018a5ee2df7589e0ca45bc41807da719e56f1d83bedce19ef1e",
+  "approval_targets": {
+    "spec": {
+      "checksum": "sha256:30a558af240a3e3c0c8af1662e9853477bb3af6544834d6649162e73a42b3f5b",
+      "components": {
+        "request_spec": "sha256:1705d3543c439407fb45ab594c9c051e2774afd62ba411161f4b1f1520683237",
+        "architecture_contract": "sha256:9e2867c663b1293d78fc46c966966e912b261a07ca47a6ef1db554790ca0dd29",
+        "execution_plan": "sha256:324da389b67c3018a5ee2df7589e0ca45bc41807da719e56f1d83bedce19ef1e"
+      },
+      "created_at": "2026-09-27T04:53:08.836Z"
+    }
+  },
+  "spec_approval": {
+    "approver": "test-user",
+    "approved_at": "2026-09-27T04:53:08.836Z",
+    "artifact_checksums": {
+      "request_spec": "sha256:1705d3543c439407fb45ab594c9c051e2774afd62ba411161f4b1f1520683237",
+      "architecture_contract": "sha256:9e2867c663b1293d78fc46c966966e912b261a07ca47a6ef1db554790ca0dd29",
+      "execution_plan": "sha256:324da389b67c3018a5ee2df7589e0ca45bc41807da719e56f1d83bedce19ef1e"
+    }
+  },
+  "developer_result_revision": "sha256:505aa9bb5ea1800477efe8b40cb024905a871da6964585c9e65d42948a7a298e"
+}

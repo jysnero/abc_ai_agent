@@ -8,6 +8,7 @@
 import { spawn } from "child_process";
 import { createHash } from "crypto";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import {
   IValidationRunner,
@@ -229,6 +230,37 @@ export class ProcessValidationRunner implements IValidationRunner {
         })),
         generated_at: new Date().toISOString(),
       };
+    }
+
+    // npm install 먼저 실행 (package.json이 있으면)
+    const packageJsonPath = path.join(this.baseRoot, "package.json");
+    if (fs.existsSync(packageJsonPath)) {
+      const npmInstallDef: CheckDefinition = {
+        id: "npm-install",
+        command: resolveNpmExecutable(process.platform),
+        args: ["install"],
+        timeout_ms: 120000,
+        max_output_bytes: 1024 * 1024,
+        cwd: this.baseRoot,
+      };
+      try {
+        const installResult = await this.executeProcess(
+          npmInstallDef.command,
+          npmInstallDef.args,
+          this.baseRoot,
+          filterEnvironmentVariables(npmInstallDef),
+          npmInstallDef.timeout_ms,
+          npmInstallDef.max_output_bytes,
+          npmInstallDef
+        );
+        // npm install 결과는 무시 (실패해도 계속 진행)
+        if (installResult.status !== "passed") {
+          console.warn(`[ProcessValidationRunner] npm install warning: ${installResult.status}`);
+        }
+      } catch (err) {
+        // npm install 실패해도 계속 진행
+        console.warn(`[ProcessValidationRunner] npm install error: ${err}`);
+      }
     }
 
     // 순차 실행 (fail-fast는 v0.2+에서 고려)

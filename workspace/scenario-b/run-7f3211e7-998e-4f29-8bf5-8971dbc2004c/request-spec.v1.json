@@ -1,0 +1,139 @@
+{
+  "type": "webview-component",
+  "version": "1.0",
+  "name": "React Checkbox Component with Demo",
+  "description": "Create a reusable React checkbox component with browser demo and WCAG 2.1 AA support",
+  "requirement": {
+    "summary": "Implement a TypeScript React checkbox component with browser-testable demo",
+    "details": [
+      "Create named export function Checkbox with TypeScript support",
+      "Implement props: checked (boolean), onChange (function), label (string), disabled (boolean)",
+      "Support keyboard: Space bar to toggle when focused",
+      "Include ARIA: aria-label and aria-checked attributes",
+      "Style with Tailwind CSS only",
+      "Create single-file demo (demo/index.html) for browser testing",
+      "Write unit tests verifying each AC",
+      "Compile without TypeScript errors",
+      "Document with usage example in README"
+    ]
+  },
+  "demo_browser_tests": {
+    "description": "Manual tests in generated demo/index.html",
+    "ac_3_space_key": "Tab to checkbox, press Space, verify state toggles",
+    "ac_3_click": "Click checkbox, verify state toggles",
+    "ac_4_aria_label": "Inspect element, verify aria-label present",
+    "ac_4_aria_checked": "Inspect element, verify aria-checked attribute",
+    "ac_7_focus_style": "Tab to checkbox, verify focus outline visible",
+    "ac_2_disabled": "Click disabled checkbox, verify no state change",
+    "ac_8_readme": "Open README.md, verify usage example present"
+  },
+  "constraints": {
+    "language": "TypeScript",
+    "framework": "React 18+",
+    "style": "Tailwind CSS only",
+    "accessibility": "WCAG 2.1 AA (scope: keyboard, ARIA labels)",
+    "test_framework": "vitest",
+    "demo": "single HTML file with test instructions"
+  },
+  "expected_files": {
+    "component": "src/Checkbox.tsx",
+    "types": "src/Checkbox.types.ts",
+    "test": "src/Checkbox.test.tsx",
+    "demo": "demo/index.html",
+    "docs": "README.md"
+  },
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "claim": "Component exports named function Checkbox",
+      "test": "import { Checkbox } from './Checkbox' succeeds",
+      "verification": "TypeScript compilation passes"
+    },
+    {
+      "id": "AC-2",
+      "claim": "Props interface: checked (boolean), onChange (func), label (string), disabled (boolean)",
+      "test": "TypeScript type checking on props",
+      "verification": "tsc --noEmit exits 0"
+    },
+    {
+      "id": "AC-3",
+      "claim": "Space key toggles checked state when focused",
+      "test": "Unit test: keydown Space → state changes",
+      "verification": "test case passes"
+    },
+    {
+      "id": "AC-4",
+      "claim": "ARIA attributes: aria-label and aria-checked present",
+      "test": "Unit test: element has attributes",
+      "verification": "getByRole and getAttribute succeed"
+    },
+    {
+      "id": "AC-5",
+      "claim": "Sufficient unit test coverage",
+      "test": "vitest run --coverage output",
+      "verification": "Test output shows coverage %; no specific threshold enforced"
+    },
+    {
+      "id": "AC-6",
+      "claim": "TypeScript: Compilation without errors",
+      "test": "npm run build (tsc --noEmit)",
+      "verification": "Exit code 0, no errors printed"
+    },
+    {
+      "id": "AC-7",
+      "claim": "Styling with Tailwind CSS",
+      "test": "Code inspection: className contains Tailwind utilities",
+      "verification": "Classes like 'focus:outline-2' present in JSX"
+    },
+    {
+      "id": "AC-8",
+      "claim": "Documentation: README includes usage example",
+      "test": "File exists with import/usage code",
+      "verification": "README.md contains 'import { Checkbox }' and JSX example"
+    }
+  ],
+  "dependencies": {
+    "production": {
+      "react": "^18.0.0",
+      "typescript": "^5.0.0"
+    },
+    "development": {
+      "vitest": "^1.0.0",
+      "react-testing-library": "^14.0.0",
+      "@testing-library/user-event": "^14.0.0",
+      "tailwindcss": "^3.0.0"
+    }
+  },
+  "validation_required": {
+    "build": "tsc --noEmit",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage (informational, no threshold)"
+  },
+  "api_call_analysis": {
+    "description": "Based on code analysis of DeveloperAgent.executeByPlan()",
+    "calls": {
+      "code_generation": 1,
+      "test_generation": 1,
+      "self_validation": 1,
+      "total_initial": 3
+    },
+    "repair": {
+      "validation_failure": "Triggers repair loop (max 3 retries)",
+      "repair_calls_per_attempt": 2,
+      "max_repair_calls": 6
+    },
+    "worst_case": {
+      "initial": 3,
+      "repair_3_times": 6,
+      "total": 9
+    },
+    "expected_checkbox": 3,
+    "note": "ValidationRunner executes local commands (0 API calls). Estimation: 3 calls for successful Checkbox generation."
+  },
+  "not_in_scope": {
+    "wcag_full": "Full WCAG 2.1 AA requires color contrast, mobile testing, screen reader, etc. This scope covers keyboard and ARIA only.",
+    "coverage_threshold": "Test count and coverage % are not used to declare success; test execution and AC verification are.",
+    "release": "approve-release and RELEASE_READY are NOT automated; stops at HUMAN_GATE_RELEASE."
+  }
+}
+

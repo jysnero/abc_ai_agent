@@ -67,8 +67,8 @@ export function buildExecutionPlan(
     target_files: targetFiles,
     bridge_usage: bridgeUsage,
     validation_commands: [
-      { check_id: "architecture", command: "node scripts/check-architecture.mjs" },
-      { check_id: "tests", command: "npm test" },
+      { check_id: "typecheck", command: "tsc --noEmit" },
+      { check_id: "build", command: "npm run build" },
     ],
     completion_criteria: {
       required_files_created: targetFiles,

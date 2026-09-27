@@ -1,0 +1,35 @@
+{
+  "contract_id": "checkbox-v1",
+  "version": "1.0.0",
+  "pattern_type": "webview-component",
+  "issued_by": "p0-7-smoke-test",
+  "folder_structure": {
+    "required_files": [
+      "src/Checkbox.tsx",
+      "src/Checkbox.test.tsx",
+      "README.md"
+    ],
+    "allowed_globs": [
+      "src/**/*.tsx",
+      "src/**/*.ts",
+      "**/*.md",
+      "demo/**/*"
+    ]
+  },
+  "allowed_dependencies": {
+    "script_hosts": [],
+    "npm_packages": [
+      "react@^18.0.0",
+      "typescript@^5.0.0",
+      "tailwindcss@^3.0.0"
+    ]
+  },
+  "bridge_contract_ref": {
+    "contract_id": "none",
+    "path": ""
+  },
+  "bridge_policy": {},
+  "forbidden_patterns": [],
+  "design_tokens_ref": ""
+}
+
