@@ -146,6 +146,14 @@ export class WorkflowRunner {
       );
     }
 
+    // 중복 승인 검증
+    if (manifest.spec_approval) {
+      throw new Error(
+        `Spec has already been approved by ${manifest.spec_approval.approver}. ` +
+        `Cannot approve twice in the same HUMAN_GATE_SPEC state.`
+      );
+    }
+
     // Approval target checksum 계산
     const contractArtifact = await loadArtifact(runId, "architecture-contract");
     const planArtifact = await loadArtifact(runId, "execution-plan");

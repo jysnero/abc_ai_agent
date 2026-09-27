@@ -1,6 +1,6 @@
 import { WorkflowRunner } from "../../workflow/workflow-runner.js";
 import { HumanFormatter, JsonFormatter } from "../output/formatter.js";
-import { CliError, ExitCode } from "../cli-errors.js";
+import { CliError, ExitCode, RunNotFoundError, InvalidStateError } from "../cli-errors.js";
 
 export interface ApproveSpecOptions {
   "run-id": string;
@@ -32,11 +32,15 @@ export async function approveSpecCommand(
       : HumanFormatter.formatApprovalMessage(targetChecksum);
     return { output, exitCode: 0 };
   } catch (err) {
-    if ((err as Error).message.includes("not found")) {
-      throw new CliError("Run not found", ExitCode.RUN_NOT_FOUND_ERROR);
+    const errMsg = (err as Error).message;
+    if (errMsg.includes("Run not found")) {
+      throw new RunNotFoundError(errMsg);
     }
-    if ((err as Error).message.includes("Cannot approve")) {
-      throw new CliError((err as Error).message, ExitCode.INVALID_STATE_ERROR);
+    if (errMsg.includes("Invalid run ID format")) {
+      throw new RunNotFoundError("Invalid run ID format");
+    }
+    if (errMsg.includes("Cannot approve") || errMsg.includes("already been approved")) {
+      throw new InvalidStateError(errMsg);
     }
     throw err;
   }

@@ -20,8 +20,8 @@ test("Orchestrator: createRequest generates valid run ID", () => {
     requirements: "Test requirements",
   });
 
-  assert(runId.startsWith("req-"), "Run ID should start with 'req-'");
-  assert(runId.match(/req-\d{8}-\d{3}-/), "Run ID should match format: req-YYYYMMDD-NNN-*");
+  assert(runId.startsWith("run-"), "Run ID should start with 'run-'");
+  assert(runId.match(/run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/), "Run ID should match UUID format: run-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx");
 });
 
 test("Orchestrator: getRequest returns created request", () => {

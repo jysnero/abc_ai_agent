@@ -27,3 +27,21 @@ export class WorkflowError extends CliError {
     super(message, ExitCode.WORKFLOW_ERROR);
   }
 }
+
+export class RunNotFoundError extends CliError {
+  constructor(message: string = "Run not found") {
+    super(message, ExitCode.RUN_NOT_FOUND_ERROR);
+  }
+}
+
+export class InvalidStateError extends CliError {
+  constructor(message: string) {
+    super(message, ExitCode.INVALID_STATE_ERROR);
+  }
+}
+
+export class ApprovalMismatchError extends CliError {
+  constructor(message: string) {
+    super(message, ExitCode.APPROVAL_MISMATCH_ERROR);
+  }
+}

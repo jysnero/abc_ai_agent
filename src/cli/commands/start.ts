@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { WorkflowRunner } from "../../workflow/workflow-runner.js";
 import { HumanFormatter, JsonFormatter, derivePendingAction } from "../output/formatter.js";
-import { InputFileError, WorkflowError } from "../cli-errors.js";
+import { CliError, InputFileError, WorkflowError, ExitCode } from "../cli-errors.js";
 import { loadManifest } from "../../storage/run-storage.js";
 
 export interface StartOptions {
@@ -16,7 +16,7 @@ export async function startCommand(
   options: StartOptions
 ): Promise<{ output: string; exitCode: number }> {
   if (!options.spec || !options.contract) {
-    throw new InputFileError("Required options: --spec <file> --contract <file>");
+    throw new CliError("Required options: --spec <file> --contract <file>", ExitCode.CLI_ARGS_ERROR);
   }
 
   const specPath = path.resolve(options.spec);

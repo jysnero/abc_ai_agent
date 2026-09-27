@@ -18,7 +18,7 @@ import {
   validateChecksumFormat,
 } from "../../src/storage/run-storage.js";
 
-const TEST_RUN_ID = "req-20260920-001-test";
+const TEST_RUN_ID = "run-12345678-1234-1234-1234-123456789012";
 
 // Cleanup function
 async function cleanup() {
