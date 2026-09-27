@@ -1,0 +1,9 @@
+{
+  "status": "failure",
+  "generatedCode": {},
+  "testCode": {},
+  "selfValidation": {},
+  "errors": [
+    "Error: Agent chat failed after 3 retries: Request timed out."
+  ]
+}

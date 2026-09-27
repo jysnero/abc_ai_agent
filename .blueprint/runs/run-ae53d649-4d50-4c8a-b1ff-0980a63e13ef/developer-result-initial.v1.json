@@ -1,0 +1,28 @@
+{
+  "status": "success",
+  "generatedCode": {},
+  "testCode": {
+    "tests/<mirrored/path>/test_<module>.<ext>": "<test code>\n```\n\nEach test file will cover:\n- **Main functionality:** expected inputs produce expected outputs, and state changes and return values are correct.\n- **Error cases:** invalid types, missing or malformed arguments, raised exceptions and their messages, and failed dependencies (mocked).\n- **Edge cases:** empty, null, or zero inputs, boundary values (min/max, off-by-one), very large inputs, Unicode and special characters, duplicates, and idempotency.\n- **Structure:** parametrized tests where it makes sense, clear test names that describe behavior, isolated fixtures, and no reliance on test order.\n\nPaste the code and I'll write the full suite."
+  },
+  "selfValidation": {
+    "completeness": "no",
+    "coverage": [],
+    "missing": [
+      "src/index.tsx",
+      "src/pages/Game.tsx",
+      "package.json",
+      "tsconfig.json"
+    ],
+    "issues": [
+      "The Generated Code Summary is empty. No files, code, or file manifest were provided, so none of the 4 required target files can be confirmed as created.",
+      "completion_criteria.required_files_created cannot be met. All 4 required files are unverified.",
+      "completion_criteria.all_validation_pass cannot be confirmed. No output was provided for 'npm run build', 'npm test', or 'node scripts/check-architecture.mjs'.",
+      "No package.json content was provided, so it is unknown whether 'build' and 'test' npm scripts exist. The 'build' and 'test' validation commands would fail without them.",
+      "The 'architecture-check' command depends on scripts/check-architecture.mjs, which is not in target_files. It is unclear whether this script already exists in the repository or needs to be created.",
+      "forbidden_patterns is set to 'block_free', but the plan does not say which patterns are forbidden. Compliance cannot be checked without a defined pattern list, and no code is available to scan in any case.",
+      "bridge_usage lists NHBridge.reward.grantPoint, NHBridge.ad.showRewarded and NHBridge.nav.close, each with a value of 0. It is unclear whether this means the call count must be zero (no bridge calls allowed) or is a placeholder count. Usage cannot be checked without code.",
+      "request_spec_revision is an empty string. The plan cannot be traced to a specific request spec revision, which weakens traceability for contract req-2026-0920-001-minigame."
+    ],
+    "notes": "Completeness cannot be confirmed because no generated code was supplied for review. To re-validate, please provide: (1) the full contents or a file manifest for src/index.tsx, src/pages/Game.tsx, package.json and tsconfig.json; (2) the output and exit codes of the three validation commands; (3) confirmation of whether scripts/check-architecture.mjs exists; (4) what the bridge_usage values of 0 are meant to enforce and which patterns 'block_free' forbids. Also note that generated_at (2026-09-27) is 7 days after the date encoded in the contract ID (2026-09-20). This is not necessarily a problem, but it is worth confirming that the plan matches the latest request spec."
+  }
+}

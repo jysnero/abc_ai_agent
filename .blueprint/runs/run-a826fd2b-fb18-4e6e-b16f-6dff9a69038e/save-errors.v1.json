@@ -1,0 +1,4 @@
+[
+  "File not in allowed globs: tests/utils/test_parser.py",
+  "Missing required files: src\\index.tsx, src\\pages\\Game.tsx, package.json, tsconfig.json"
+]

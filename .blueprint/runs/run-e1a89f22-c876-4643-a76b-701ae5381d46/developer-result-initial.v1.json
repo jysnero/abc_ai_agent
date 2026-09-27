@@ -1,0 +1,27 @@
+{
+  "status": "success",
+  "generatedCode": {},
+  "testCode": {
+    "tests/<mirrored_path>/test_<module>.<ext>": "<test code>\n```\n\nEach file will cover:\n\n| Category | Examples |\n|---|---|\n| **Main functionality** | Typical inputs, expected outputs, return types, state changes |\n| **Error cases** | Invalid types, malformed input, missing arguments, expected exceptions, dependency failures |\n| **Edge cases** | Empty, null, or zero values, boundary values, very large inputs, Unicode, duplicates, concurrency or ordering issues where relevant |\n\nI'll also use parameterized tests where they reduce repetition, and add mocks or fixtures for external dependencies so the tests stay isolated and deterministic."
+  },
+  "selfValidation": {
+    "completeness": "no",
+    "coverage": [],
+    "missing": [
+      "src/index.tsx",
+      "src/pages/Game.tsx",
+      "package.json",
+      "tsconfig.json"
+    ],
+    "issues": [
+      "The 'Generated Code Summary' section is empty. No generated code, file list or file contents were provided, so none of the 4 target files can be shown to exist or to be implemented.",
+      "completion_criteria.required_files_created is not met. All 4 required files are unaccounted for.",
+      "completion_criteria.all_validation_pass cannot be confirmed. No results were provided for 'npm run build', 'npm test' or 'node scripts/check-architecture.mjs'.",
+      "The architecture check (scripts/check-architecture.mjs) is not in target_files. There is no evidence that it already exists in the repo, so this validation command may fail even if the code is correct.",
+      "completion_criteria.forbidden_patterns ('block_free') cannot be checked without code. The term 'block_free' is also ambiguous: it may mean 'no forbidden patterns allowed' or 'no blocking enforcement'. The plan owner should clarify.",
+      "bridge_usage lists NHBridge.reward.grantPoint, NHBridge.ad.showRewarded and NHBridge.nav.close, each with the value 0. It is unclear whether 0 means 'must not be used', 'expected call count is zero' or 'not yet counted'. Compliance cannot be checked without code, and the intent should be confirmed. A minigame usually needs at least nav.close.",
+      "request_spec_revision is an empty string. The plan cannot be traced to a specific request spec revision, which weakens auditability."
+    ],
+    "notes": "This verdict follows from having no input, not from inspecting any code. Because the generated code summary was blank, the result is 'no' and every target file is listed as missing. To re-validate, please provide: (1) the list of generated files with their contents or a summary of each; (2) the output of the three validation commands; (3) a clarification of the bridge_usage values and the 'block_free' forbidden_patterns setting. Once these are available, each target file can be checked against the plan, including bridge API usage in src/pages/Game.tsx, the build and test scripts in package.json, and JSX/strict settings in tsconfig.json."
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "contract_id": "req-2026-0927-001-ox-quiz-browser",
+  "version": "1.0.0",
+  "pattern_type": "browser_component",
+  "issued_by": "architect_agent",
+  "description": "Browser-only OX quiz component (no native APIs)",
+  "folder_structure": {
+    "required_files": [
+      "src/App.tsx",
+      "package.json",
+      "tsconfig.json",
+      "demo/index.html",
+      "tests/Quiz.test.tsx"
+    ],
+    "allowed_globs": [
+      "src/**/*.{ts,tsx}",
+      "tests/**/*.{ts,tsx}",
+      "demo/**/*.html",
+      "package.json",
+      "tsconfig.json",
+      "README.md"
+    ]
+  },
+  "allowed_dependencies": {
+    "script_hosts": [
+      "https://cdnjs.cloudflare.com",
+      "https://cdn.jsdelivr.net"
+    ],
+    "npm_packages": [
+      "react@^18.0.0",
+      "react-dom@^18.0.0",
+      "typescript@^5.0.0"
+    ]
+  },
+  "bridge_policy": {},
+  "forbidden_patterns": [
+    {
+      "id": "no-eval",
+      "regex": "\\beval\\s*\\(",
+      "reason": "eval() is a security risk",
+      "severity": "block"
+    },
+    {
+      "id": "no-hardcoded-secret",
+      "regex": "api[_-]?key|secret|token.*=.*['\\\"]",
+      "reason": "Hardcoded credentials must not be committed",
+      "severity": "block"
+    },
+    {
+      "id": "no-external-api",
+      "regex": "fetch|axios|XMLHttpRequest.*(http|api|bridge)",
+      "reason": "Browser-only: no external APIs",
+      "severity": "warn"
+    }
+  ],
+  "design_tokens_ref": "design/tokens.json"
+}

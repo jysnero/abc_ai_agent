@@ -1,0 +1,42 @@
+{
+  "contract_id": "req-2026-0920-001-minigame",
+  "version": "1.0.0",
+  "request_spec_revision": "",
+  "target_files": [
+    "src/index.tsx",
+    "src/pages/Game.tsx",
+    "package.json",
+    "tsconfig.json"
+  ],
+  "bridge_usage": {
+    "NHBridge.reward.grantPoint": 0,
+    "NHBridge.ad.showRewarded": 0,
+    "NHBridge.nav.close": 0
+  },
+  "validation_commands": [
+    {
+      "check_id": "build",
+      "command": "npm run build"
+    },
+    {
+      "check_id": "test",
+      "command": "npm test"
+    },
+    {
+      "check_id": "architecture-check",
+      "command": "node scripts/check-architecture.mjs"
+    }
+  ],
+  "completion_criteria": {
+    "required_files_created": [
+      "src/index.tsx",
+      "src/pages/Game.tsx",
+      "package.json",
+      "tsconfig.json"
+    ],
+    "all_validation_pass": true,
+    "forbidden_patterns": "block_free"
+  },
+  "generated_at": "2026-09-27T06:18:45.167Z",
+  "generated_by": "plan_builder"
+}

@@ -1,0 +1,27 @@
+{
+  "status": "success",
+  "generatedCode": {},
+  "testCode": {
+    "tests/utils/test_parser.py": "<test code>\n```\n\nPaste the code and I'll write the full test suite."
+  },
+  "selfValidation": {
+    "completeness": "no",
+    "coverage": [],
+    "missing": [
+      "src/index.tsx",
+      "src/pages/Game.tsx",
+      "package.json",
+      "tsconfig.json"
+    ],
+    "issues": [
+      "The Generated Code Summary is empty, so no generated code was provided to check against the plan.",
+      "None of the 4 files in completion_criteria.required_files_created is shown to exist: src/index.tsx, src/pages/Game.tsx, package.json, tsconfig.json.",
+      "all_validation_pass: true cannot be confirmed. There are no results for 'build' (npm run build), 'test' (npm test) or 'architecture-check' (node scripts/check-architecture.mjs). Without package.json, 'npm run build' and 'npm test' cannot run at all.",
+      "forbidden_patterns: 'block_free' cannot be checked because there is no code to scan. The meaning of 'block_free' is also not defined in the plan, so it is unclear which patterns are forbidden.",
+      "The bridge_usage entries (NHBridge.reward.grantPoint, NHBridge.ad.showRewarded, NHBridge.nav.close) are all set to 0. It is unclear whether 0 means 'must not be used', 'no minimum required' or 'not yet counted'. For a minigame that lists reward, rewarded-ad and close bridges, zero usage may be a plan-generation error. Either way, it cannot be checked without code.",
+      "request_spec_revision is an empty string, so the plan cannot be traced to a specific request spec revision.",
+      "scripts/check-architecture.mjs is used by a validation command but is not in target_files. It must already exist in the repository, or the architecture-check step will fail."
+    ],
+    "notes": "The code is not complete because there is no evidence of any generated code. It is possible the summary was dropped when this validation was requested. Please re-send the actual code or file listing for the 4 target files, along with the output of the 3 validation commands, so a real review can be done. It would also help to clarify: (1) what 'block_free' requires, (2) whether bridge_usage 0 is a 'must not call' rule or a placeholder, and (3) which request spec revision the plan was built from."
+  }
+}

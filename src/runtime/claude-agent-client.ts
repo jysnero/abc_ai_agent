@@ -31,6 +31,7 @@ export class ClaudeAgentClient implements IAgentClient {
     this.client = new Anthropic({
       apiKey: this.config.apiKey,
       timeout: this.config.timeout_ms,
+      maxRetries: 0,  // SDK 내부 재시도 비활성화 (앱 레벨에서 제어)
     });
   }
 
@@ -56,12 +57,33 @@ export class ClaudeAgentClient implements IAgentClient {
           })),
         });
 
-        // 응답 추출 (Extended Thinking 지원: thinking + text 콘텐츠)
-        const textBlock = response.content.find((block: any) => block.type === "text");
-        const content = textBlock && textBlock.type === "text" ? textBlock.text : "";
+        // 응답 추출: 모든 text 블록을 순서대로 연결 (thinking 제외)
+        const textBlocks = response.content.filter(
+          (block: any) => block.type === "text"
+        );
 
-        const blockTypes = response.content.map((b: any) => `${b.type}(${b.type === "text" ? b.text.length : 0})`).join(", ");
-        console.log(`[ClaudeAgentClient] success! blocks=[${blockTypes}], text_found=${!!textBlock}, content.length=${content.length}, tokens: input=${response.usage.input_tokens}, output=${response.usage.output_tokens}`);
+        if (textBlocks.length === 0) {
+          throw new Error(
+            `No text content in response. Blocks: ${response.content.map((b: any) => b.type).join(", ")}`
+          );
+        }
+
+        const content = textBlocks.map((b: any) => (b as any).text).join("\n");
+        const blockSummary = response.content
+          .map((b: any) => {
+            if (b.type === "text") {
+              return `text(${(b as any).text.length})`;
+            } else if (b.type === "thinking") {
+              return `thinking(${(b as any).thinking?.length || 0})`;
+            }
+            return `${b.type}(?)`;
+          })
+          .join(", ");
+
+        console.log(
+          `[ClaudeAgentClient] success! blocks=[${blockSummary}], text_blocks=${textBlocks.length}, content_length=${content.length}, ` +
+          `tokens: input=${response.usage.input_tokens}, output=${response.usage.output_tokens}, stop_reason=${response.stop_reason}`
+        );
         return {
           content,
           stop_reason: response.stop_reason as "end_turn" | "max_tokens" | "stop_sequence",

@@ -1,0 +1,24 @@
+﻿{
+  "name": "nh-minigame-shell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tap Rush mini-game WebView built on the minigame_shell_v1 contract (req-2026-0920-001-minigame)",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

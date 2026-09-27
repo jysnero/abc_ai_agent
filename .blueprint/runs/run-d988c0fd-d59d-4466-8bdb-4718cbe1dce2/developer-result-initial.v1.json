@@ -1,0 +1,27 @@
+{
+  "status": "success",
+  "generatedCode": {},
+  "testCode": {
+    "tests/<mirrored_path>/test_<module>.<ext>": "<test code>\n```\n\nThese will cover:\n\n- **Main functionality:** the happy path for each public function, class, or method, including typical inputs, return values, and state changes.\n- **Error cases:** invalid types, out-of-range values, missing arguments, raised exceptions or error returns, and failures from mocked dependencies.\n- **Edge cases:** empty inputs, `None`/`null`, boundary values (0, -1, max size), Unicode or special characters, very large inputs, duplicates, and idempotency.\n- **Structure:** fixtures and setup/teardown, parametrized tests to avoid repetition, descriptive test names, and isolated tests with no shared mutable state."
+  },
+  "selfValidation": {
+    "completeness": "no",
+    "coverage": [],
+    "missing": [
+      "src/index.tsx",
+      "src/pages/Game.tsx",
+      "package.json",
+      "tsconfig.json"
+    ],
+    "issues": [
+      "The Generated Code Summary is empty. None of the four target files in 'target_files' or 'completion_criteria.required_files_created' can be confirmed as created.",
+      "The validation commands (build, test, architecture-check) cannot be verified. 'all_validation_pass: true' is unmet because there is no code or command output.",
+      "'forbidden_patterns: block_free' cannot be checked because there is no code to scan.",
+      "'bridge_usage' lists NHBridge.reward.grantPoint, NHBridge.ad.showRewarded and NHBridge.nav.close, all set to 0. Without code, I can't tell whether the implementation avoids these bridge calls. The plan also doesn't say whether 0 means 'must not be used' or 'expected call count not yet specified'.",
+      "'request_spec_revision' is an empty string, so the plan can't be traced to a specific request spec revision.",
+      "The 'npm test' command needs a test script and at least one test file, but neither package.json scripts nor test files are listed. The command may fail even after the target files are created.",
+      "The 'architecture-check' command runs 'node scripts/check-architecture.mjs', but that script is not in target_files. It must already exist in the repository, or the check will fail."
+    ],
+    "notes": "This validation can't pass because no generated code was provided. To proceed: (1) regenerate the code or supply the output for all four target files; (2) make sure package.json defines 'build' and 'test' scripts and that a test file exists so 'npm test' passes; (3) confirm scripts/check-architecture.mjs exists; (4) clarify what bridge_usage values of 0 mean and fill in request_spec_revision. Then re-run this check against the actual code and the validation command output."
+  }
+}
