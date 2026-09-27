@@ -280,7 +280,7 @@ node dist/src/cli/index.js start `
 # 3. 상태 확인
 node dist/src/cli/index.js status --run-id run-abcd-efgh-...
 
-# 예상: status = "HUMAN_GATE_SPEC", agent_mode = "production"
+# 예상: status = "HUMAN_GATE_SPEC", agent_mode = "claude" (--test-mode이면 "fake")
 
 # 4. Spec 승인
 node dist/src/cli/index.js approve-spec `

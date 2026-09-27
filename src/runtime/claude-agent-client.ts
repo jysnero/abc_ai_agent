@@ -11,6 +11,8 @@ import type {
   AgentClientConfig,
   AgentMessage,
   AgentResponse,
+  EffectiveClientConfig,
+  RawAgentResponse,
 } from "./agent-client.js";
 
 /**
@@ -23,6 +25,8 @@ export class ClaudeAgentClient implements IAgentClient {
   constructor(config: AgentClientConfig = {}) {
     this.config = {
       apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY || "",
+      model: config.model ?? "claude-opus-5-5",
+      max_tokens: config.max_tokens ?? 8192,
       timeout_ms: config.timeout_ms ?? 60000,
       max_retries: config.max_retries ?? 3,
       retry_delay_ms: config.retry_delay_ms ?? 1000,
@@ -33,6 +37,16 @@ export class ClaudeAgentClient implements IAgentClient {
       timeout: this.config.timeout_ms,
       maxRetries: 0,  // SDK 내부 재시도 비활성화 (앱 레벨에서 제어)
     });
+  }
+
+  getEffectiveConfig(): EffectiveClientConfig {
+    return {
+      model: this.config.model,
+      max_tokens: this.config.max_tokens,
+      timeout_ms: this.client.timeout,
+      app_max_retries: this.config.max_retries,
+      sdk_max_retries: this.client.maxRetries,
+    };
   }
 
   /**
@@ -48,8 +62,8 @@ export class ClaudeAgentClient implements IAgentClient {
       try {
         console.log(`[ClaudeAgentClient] chat attempt ${attempt + 1}/${this.config.max_retries + 1}, apiKey=${this.config.apiKey ? 'set' : 'unset'}`);
         const response = await this.client.messages.create({
-          model: "claude-opus-5-5",
-          max_tokens: 8192,
+          model: this.config.model,
+          max_tokens: this.config.max_tokens,
           system: systemPrompt,
           messages: messages.map((msg) => ({
             role: msg.role,
@@ -63,9 +77,21 @@ export class ClaudeAgentClient implements IAgentClient {
         );
 
         if (textBlocks.length === 0) {
-          throw new Error(
-            `No text content in response. Blocks: ${response.content.map((b: any) => b.type).join(", ")}`
-          );
+          const blockTypes = response.content.map((b: any) => b.type);
+          const err = new Error(`No text content in response. Blocks: ${blockTypes.join(", ")}`);
+          const raw: RawAgentResponse = {
+            stop_reason: response.stop_reason ?? null,
+            usage: {
+              input_tokens: response.usage.input_tokens,
+              output_tokens: response.usage.output_tokens,
+            },
+            block_types: blockTypes,
+            text: "",
+          };
+          (err as Error & { raw?: RawAgentResponse }).raw = raw;
+          // 응답을 받은 뒤의 형식 오류는 재시도하지 않음 (과금 요청 추가 방지)
+          (err as Error & { noRetry?: boolean }).noRetry = true;
+          throw err;
         }
 
         const content = textBlocks.map((b: any) => (b as any).text).join("\n");
@@ -94,6 +120,9 @@ export class ClaudeAgentClient implements IAgentClient {
         };
       } catch (error: unknown) {
         lastError = error instanceof Error ? error : new Error(String(error));
+        if ((lastError as Error & { noRetry?: boolean }).noRetry) {
+          throw lastError;
+        }
 
         // 마지막 시도가 아니면 대기 후 재시도
         if (attempt < this.config.max_retries) {

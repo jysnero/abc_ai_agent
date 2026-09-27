@@ -28,10 +28,27 @@ import {
 import { calculateChecksum } from "../validation/validation-runner.js";
 import { DeveloperAgent } from "../agents/developer.js";
 import { autoRepair } from "../agents/repair-agent.js";
+import { resolveArchitectureChecker } from "./platform-template.js";
 
 // Run storage 기본 디렉터리 조회
 function getRunsBaseDir(): string {
   return process.env.TEST_RUN_DIR || path.resolve(".blueprint/runs");
+}
+
+/**
+ * architecture-check 실행 명령: 플랫폼 checker + Run에 저장된 계약 + 생성 workspace (모두 절대경로, shell 미사용)
+ */
+export function buildArchitectureCheckCommand(
+  runId: string,
+  workspaceDir: string,
+  platformFiles: string[]
+): { command: string; args: string[] } {
+  const contractPath = path.resolve(getRunsBaseDir(), runId, "architecture-contract.v1.json");
+  const args = [resolveArchitectureChecker(), contractPath, "--workspace", path.resolve(workspaceDir)];
+  for (const f of platformFiles) {
+    args.push("--ignore", f);
+  }
+  return { command: process.execPath, args };
 }
 
 export interface WorkflowInput {
@@ -65,15 +82,46 @@ export class WorkflowRunner {
   private orchestrator: AgentOrchestrator;
   private developerAgent: DeveloperAgent;
   private validationRunner: IValidationRunner;
+  private maxRepairAttempts: number;
 
   constructor(
     orchestrator: AgentOrchestrator,
     developerAgent: DeveloperAgent,
-    validationRunner: IValidationRunner
+    validationRunner: IValidationRunner,
+    options: { maxRepairAttempts?: number } = {}
   ) {
     this.orchestrator = orchestrator;
     this.developerAgent = developerAgent;
     this.validationRunner = validationRunner;
+    this.maxRepairAttempts = options.maxRepairAttempts ?? 3;
+  }
+
+  getMaxRepairAttempts(): number {
+    const isSmokeTest = process.env.SMOKE_TEST === "true";
+    const isNoRepair = process.env.NO_REPAIR === "true";
+    return (isSmokeTest || isNoRepair) ? 0 : this.maxRepairAttempts;
+  }
+
+  private async escalateDeveloperFailure(runId: string, errorMsg: string): Promise<never> {
+    const isApiTimeout = errorMsg.includes("timed out") || errorMsg.includes("timeout");
+    if (isApiTimeout) {
+      const effective = this.developerAgent.getEffectiveConfig?.() ?? null;
+      const timeoutDiagnosis = {
+        error_type: "api_timeout",
+        error_message: errorMsg,
+        timestamp: new Date().toISOString(),
+        stage: "developer_execution",
+        config: effective,
+        api_response: null,
+        usage: null,
+        stop_reason: null,
+      };
+      await saveArtifact(runId, "timeout-diagnosis", JSON.stringify(timeoutDiagnosis, null, 2));
+      await transitionState(runId, "NEEDS_HUMAN_REVIEW");
+      throw new Error(`Agent execution timeout: ${errorMsg}. Saved to timeout-diagnosis artifact.`);
+    }
+    await transitionState(runId, "NEEDS_HUMAN_REVIEW");
+    throw new Error(`Developer Agent failed: ${errorMsg}. Subsequent steps halted.`);
   }
 
   /**
@@ -265,56 +313,48 @@ export class WorkflowRunner {
     const executionPlan = JSON.parse(planArtifact || "{}");
     const contract = JSON.parse(contractArtifact || "{}");
 
+    // 첫 API 요청 전에 실제 적용 설정 기록 (비밀정보 제외)
+    await saveArtifact(
+      runId,
+      "execution-config",
+      JSON.stringify(
+        {
+          agent: this.developerAgent.getEffectiveConfig?.() ?? null,
+          max_repair_attempts: this.getMaxRepairAttempts(),
+          developer_steps: ["generateCode", "generateTests", "selfValidate"],
+          recorded_at: new Date().toISOString(),
+        },
+        null,
+        2
+      )
+    );
+
     let devResult;
     try {
       devResult = await this.developerAgent.executeByPlan(executionPlan, contractArtifact || "");
     } catch (agentError) {
-      // API timeout 감지 및 처리
       const errorMsg = (agentError as Error).message || String(agentError);
-      const isApiTimeout = errorMsg.includes("timed out") || errorMsg.includes("timeout");
-
-      if (isApiTimeout) {
-        // API timeout 진단 저장
-        const timeoutDiagnosis = {
-          error_type: "api_timeout",
-          error_message: errorMsg,
-          timestamp: new Date().toISOString(),
-          stage: "developer_execution",
-          config: {
-            timeout_ms: 60000,
-            max_retries: 0,
-            model: "claude-opus-5-5",
-          },
-          api_response: null,
-          usage: null,
-          stop_reason: null,
-        };
-
-        await saveArtifact(runId, "timeout-diagnosis", JSON.stringify(timeoutDiagnosis, null, 2));
-        console.log(`[WorkflowRunner] API timeout detected during Developer execution. Escalating to NEEDS_HUMAN_REVIEW.`);
-
-        // NEEDS_HUMAN_REVIEW 상태로 전환
-        await transitionState(runId, "NEEDS_HUMAN_REVIEW");
-        console.log(`[WorkflowRunner] transitioned to NEEDS_HUMAN_REVIEW due to API timeout`);
-
-        // 오류 반환 (후속 단계 중단)
-        throw new Error(`Agent execution timeout: ${errorMsg}. Saved to timeout-diagnosis artifact.`);
+      if (errorMsg.includes("timed out") || errorMsg.includes("timeout")) {
+        await this.escalateDeveloperFailure(runId, errorMsg);
       }
-
-      // API timeout이 아닌 다른 오류는 그대로 전파
       throw agentError;
     }
 
     const devResultJson = JSON.stringify(devResult, null, 2);
 
-    // Developer result 초기값 저장 (artifacts에 저장)
+    // Developer result 초기값 저장 (단계별 raw text/stop_reason/usage 포함, 파싱 결과보다 먼저 보존)
     await saveArtifact(runId, "developer-result-initial", devResultJson);
+
+    // 오류 또는 불완전 응답: 저장·검증·repair 없이 중단
+    if (devResult.status === "failure") {
+      await this.escalateDeveloperFailure(runId, (devResult.errors || []).join("; ") || "unknown error");
+    }
 
     // Step 2: 생성 코드를 실제 workspace에 저장
     const { saveGeneratedCode, initializeWorkspace } = await import("../workflow/save-generated-code.js");
     const workspaceDir = path.join(path.dirname(getRunsBaseDir()), "workspace", runId);
 
-    initializeWorkspace(workspaceDir);
+    initializeWorkspace(workspaceDir, contract.pattern_type);
 
     const saveResult = await saveGeneratedCode({
       workspaceDir,
@@ -322,7 +362,12 @@ export class WorkflowRunner {
       testCode: devResult.testCode,
       allowedGlobs: contract.folder_structure?.allowed_globs || ["src/**/*", "**/*.md"],
       requiredFiles: contract.folder_structure?.required_files || [],
+      platformFiles: executionPlan.platform_files || [],
     });
+
+    if (saveResult.skippedPlatformFiles.length > 0) {
+      await saveArtifact(runId, "skipped-platform-files", JSON.stringify(saveResult.skippedPlatformFiles, null, 2));
+    }
 
     if (saveResult.errors.length > 0) {
       console.log(`[WorkflowRunner] Code save errors: ${saveResult.errors.join(", ")}`);
@@ -342,6 +387,12 @@ export class WorkflowRunner {
     // (테스트는 FakeValidationRunner 주입, 프로덕션은 ProcessValidationRunner)
     if ("setBaseRoot" in this.validationRunner && typeof this.validationRunner.setBaseRoot === "function") {
       (this.validationRunner as any).setBaseRoot(workspaceDir);
+    }
+    if ("setCheckOverride" in this.validationRunner && typeof (this.validationRunner as any).setCheckOverride === "function") {
+      (this.validationRunner as any).setCheckOverride(
+        "architecture-check",
+        buildArchitectureCheckCommand(runId, workspaceDir, executionPlan.platform_files || [])
+      );
     }
 
     const initialValidationReport = await this.validationRunner.runSuite(
@@ -395,13 +446,11 @@ export class WorkflowRunner {
       );
     }
 
-    // Auto-repair loop (최대 3회, smoke/no-repair 모드에서는 0회)
+    // Auto-repair loop (기본 3회, CLI production/smoke/no-repair에서는 0회)
     let finalDevResultJson = devResultJson;
     let finalValidationReport = initialValidationReport;
     let repairAttempt = 0;
-    const isSmokeTest = process.env.SMOKE_TEST === "true";
-    const isNoRepair = process.env.NO_REPAIR === "true";
-    const maxRepairAttempts = (isSmokeTest || isNoRepair) ? 0 : 3;
+    const maxRepairAttempts = this.getMaxRepairAttempts();
 
     while (
       finalValidationReport.failed_checks > 0 &&
@@ -480,7 +529,7 @@ export class WorkflowRunner {
       termination_reason:
         finalValidationReport.failed_checks === 0
           ? "all_checks_passed"
-          : repairAttempt >= 3
+          : repairAttempt >= maxRepairAttempts
             ? "repair_limit_exceeded"
             : "manual_termination",
       completed_at: new Date().toISOString(),

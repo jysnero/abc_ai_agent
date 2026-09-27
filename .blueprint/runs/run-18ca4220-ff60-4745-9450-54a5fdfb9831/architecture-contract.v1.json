@@ -1,0 +1,71 @@
+{
+  "contract_id": "req-2026-0927-001-ox-quiz-browser",
+  "version": "1.0.0",
+  "pattern_type": "browser_component",
+  "issued_by": "architect_agent",
+
+  "folder_structure": {
+    "required_files": [
+      "src/App.tsx",
+      "src/types.ts",
+      "demo/index.html",
+      "tests/Quiz.test.tsx",
+      "package.json",
+      "tsconfig.json"
+    ],
+    "allowed_globs": [
+      "src/**/*.{ts,tsx}",
+      "tests/**/*.{ts,tsx}",
+      "demo/**/*",
+      "public/**/*",
+      "*.json"
+    ]
+  },
+
+  "allowed_dependencies": {
+    "script_hosts": [
+      "https://cdn.tailwindcss.com"
+    ],
+    "npm_packages": [
+      "react@^18.0.0",
+      "react-dom@^18.0.0",
+      "typescript@^5.0.0"
+    ]
+  },
+
+  "bridge_contract_ref": {
+    "contract_id": "none",
+    "path": ""
+  },
+
+  "bridge_policy": {},
+
+  "forbidden_patterns": [
+    {
+      "id": "no-native-bridge",
+      "regex": "NHBridge|native.*api|mobile.*bridge",
+      "reason": "Browser-only component: no native bridge calls allowed",
+      "severity": "block"
+    },
+    {
+      "id": "no-external-api",
+      "regex": "fetch\\s*\\(|axios\\.|http://|https://",
+      "reason": "Browser quiz: no external API calls allowed",
+      "severity": "block"
+    },
+    {
+      "id": "no-eval",
+      "regex": "\\beval\\s*\\(",
+      "reason": "eval() is a security risk",
+      "severity": "block"
+    },
+    {
+      "id": "no-hardcoded-secret",
+      "regex": "api[_-]?key|secret|token.*=.*['\\\"]",
+      "reason": "Hardcoded credentials not allowed",
+      "severity": "block"
+    }
+  ],
+
+  "design_tokens_ref": ""
+}

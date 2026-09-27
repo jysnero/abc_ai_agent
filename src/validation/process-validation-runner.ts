@@ -101,6 +101,13 @@ export class ProcessValidationRunner implements IValidationRunner {
     this.baseRoot = newBaseRoot;
   }
 
+  setCheckOverride(checkId: string, override: Partial<CheckDefinition>): void {
+    this.checkDefinitionOverrides.set(checkId, {
+      ...(this.checkDefinitionOverrides.get(checkId) || {}),
+      ...override,
+    });
+  }
+
   /**
    * 현재 기본 경로 조회
    */

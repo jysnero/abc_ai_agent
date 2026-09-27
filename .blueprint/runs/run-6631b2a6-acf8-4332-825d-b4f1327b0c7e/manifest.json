@@ -1,0 +1,57 @@
+{
+  "run_id": "run-6631b2a6-acf8-4332-825d-b4f1327b0c7e",
+  "created_at": "2026-09-27T13:44:07.836Z",
+  "updated_at": "2026-09-27T13:44:07.893Z",
+  "status": "HUMAN_GATE_SPEC",
+  "initialization_status": "READY",
+  "retry_count": {
+    "arch": 0,
+    "dev_repair": 0
+  },
+  "events": [
+    {
+      "timestamp": "2026-09-27T13:44:07.836Z",
+      "from_state": "INITIAL",
+      "to_state": "PLANNING",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T13:44:07.860Z",
+      "from_state": "PLANNING",
+      "to_state": "DESIGN",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T13:44:07.863Z",
+      "from_state": "DESIGN",
+      "to_state": "ARCH_CONTRACT",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T13:44:07.866Z",
+      "from_state": "ARCH_CONTRACT",
+      "to_state": "PLAN_BUILD",
+      "triggered_by": "system"
+    },
+    {
+      "timestamp": "2026-09-27T13:44:07.893Z",
+      "from_state": "PLAN_BUILD",
+      "to_state": "HUMAN_GATE_SPEC",
+      "triggered_by": "system"
+    }
+  ],
+  "request_spec_revision": "sha256:cfd00e92d8b1ea36f22c9edf120510b53f9667590e4785a9cf3bb2f634fd6dbd",
+  "architecture_contract_revision": "sha256:bbef5fe107cd3040ceb222f65bb8ece9ec88556fdf3f3604b1abb1820c618b4f",
+  "execution_plan_revision": "sha256:4808f42fd78f24f0118de72080cf5d10e1f55fd0299d8cbf8a8d9150e5f7efb3",
+  "approval_targets": {
+    "spec": {
+      "checksum": "sha256:5297d5005378c9ebaf3d9258d5603173141c272cdec90887ca271f6288952d3b",
+      "components": {
+        "request_spec": "sha256:cfd00e92d8b1ea36f22c9edf120510b53f9667590e4785a9cf3bb2f634fd6dbd",
+        "architecture_contract": "sha256:bbef5fe107cd3040ceb222f65bb8ece9ec88556fdf3f3604b1abb1820c618b4f",
+        "execution_plan": "sha256:4808f42fd78f24f0118de72080cf5d10e1f55fd0299d8cbf8a8d9150e5f7efb3"
+      },
+      "created_at": "2026-09-27T13:44:07.888Z"
+    }
+  }
+}

@@ -11,9 +11,26 @@ import { ClaudeAgentClient } from "./claude-agent-client.js";
 
 export interface AgentClientConfig {
   apiKey?: string;
+  model?: string;
+  max_tokens?: number;
   timeout_ms?: number;
   max_retries?: number;
   retry_delay_ms?: number;
+}
+
+export interface EffectiveClientConfig {
+  model: string;
+  max_tokens: number;
+  timeout_ms: number;
+  app_max_retries: number;
+  sdk_max_retries: number;
+}
+
+export interface RawAgentResponse {
+  stop_reason: string | null;
+  usage: { input_tokens: number; output_tokens: number } | null;
+  block_types: string[];
+  text: string;
 }
 
 export interface AgentMessage {
@@ -38,6 +55,8 @@ export interface IAgentClient {
    * LLM에 메시지를 전송하고 응답을 받음
    */
   chat(messages: AgentMessage[], systemPrompt?: string): Promise<AgentResponse>;
+
+  getEffectiveConfig?(): EffectiveClientConfig;
 
   /**
    * 스트리밍 응답 (v0.2+)

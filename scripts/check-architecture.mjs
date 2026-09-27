@@ -6,8 +6,11 @@
  * Validates generated WebView services against Architecture Contract specifications.
  * Checks: JSON schema, file structure, dependencies, Bridge API, forbidden patterns, design tokens.
  *
- * Usage: node scripts/check-architecture.mjs <contract-file>
+ * Usage: node scripts/check-architecture.mjs <contract-file> [--workspace <dir>] [--ignore <glob>]...
  * Example: node scripts/check-architecture.mjs contracts/examples/valid-minigame-contract.json
+ *
+ * --workspace: 생성 workspace를 계약 기준으로 검사 (required_files 존재, allowed_globs, forbidden_patterns)
+ * --ignore:    allowed_globs/forbidden_patterns 검사에서 제외할 경로 (플랫폼 제공 파일 등). required_files 검사는 제외하지 않음
  */
 
 import fs from 'fs';
@@ -225,6 +228,17 @@ class ArchitectureValidator {
       return;
     }
 
+    // Bridge를 사용하지 않는 계약: contract_id "none" + 빈 bridge_policy만 허용
+    if (contract_id === 'none') {
+      const policy = this.contract.bridge_policy;
+      if (!policy || typeof policy !== 'object' || Object.keys(policy).length > 0) {
+        this.result.addError('bridge_contract_ref.contract_id "none" requires an empty bridge_policy');
+        return;
+      }
+      this.result.details.bridgePolicyValidation = { contract_id, methods: 0 };
+      return;
+    }
+
     if (!refPath) {
       this.result.addError('bridge_contract_ref.path is required');
       return;
@@ -303,6 +317,61 @@ class ArchitectureValidator {
       valid: patterns.length,
       invalid: this.contract.forbidden_patterns.length - patterns.length
     };
+    this.compiledPatterns = patterns;
+  }
+
+  validateWorkspace(workspaceDir, ignoreGlobs) {
+    if (!this.contract?.folder_structure || !Array.isArray(this.compiledPatterns)) {
+      this.result.addError('Workspace check skipped: contract is invalid');
+      return;
+    }
+    if (!fs.existsSync(workspaceDir) || !fs.statSync(workspaceDir).isDirectory()) {
+      this.result.addError(`Workspace not found: ${workspaceDir}`);
+      return;
+    }
+
+    const { required_files, allowed_globs } = this.contract.folder_structure;
+    // 의존성 설치·빌드 산출물은 생성 코드가 아니므로 제외
+    const ignores = ['node_modules/**', '**/dist/**', 'package-lock.json', ...ignoreGlobs];
+    const isIgnored = (rel) => ignores.some(g => minimatch(rel, g, { dot: true }));
+
+    for (const req of required_files) {
+      if (!fs.existsSync(path.join(workspaceDir, req))) {
+        this.result.addError(`[workspace] required file missing: ${req}`);
+      }
+    }
+
+    const files = [];
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name === '.git') continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else files.push(path.relative(workspaceDir, full).replace(/\\/g, '/'));
+      }
+    };
+    walk(workspaceDir);
+
+    const scanned = files.filter(f => !isIgnored(f)).sort();
+    for (const rel of scanned) {
+      if (!allowed_globs.some(g => minimatch(rel, g, { dot: true }))) {
+        this.result.addError(`[workspace] file not in allowed_globs: ${rel}`);
+      }
+      const content = fs.readFileSync(path.join(workspaceDir, rel), 'utf-8');
+      for (const p of this.compiledPatterns) {
+        if (p.regex.test(content)) {
+          const msg = `[workspace] forbidden pattern "${p.id}" in ${rel}: ${p.reason}`;
+          if (p.severity === 'block') this.result.addError(msg);
+          else this.result.addWarning(msg);
+        }
+      }
+    }
+
+    this.result.details.workspaceValidation = {
+      workspace: workspaceDir,
+      scanned_files: scanned.join(', ') || '(none)',
+      ignored: ignores.join(', ')
+    };
   }
 
   validateDesignTokens() {
@@ -329,14 +398,36 @@ async function main() {
     process.exit(1);
   }
 
-  const contractFile = args[0];
+  let contractFile = null;
+  let workspaceDir = null;
+  const ignoreGlobs = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--workspace' && i + 1 < args.length) {
+      workspaceDir = path.resolve(args[++i]);
+    } else if (args[i] === '--ignore' && i + 1 < args.length) {
+      ignoreGlobs.push(args[++i]);
+    } else if (!args[i].startsWith('--') && contractFile === null) {
+      contractFile = args[i];
+    } else {
+      console.error(`Unknown or incomplete argument: ${args[i]}`);
+      process.exit(1);
+    }
+  }
+  if (contractFile === null) {
+    console.error('Missing <contract-file>');
+    process.exit(1);
+  }
 
   console.log('🏗️  Architecture Contract Validation');
   console.log(`Contract: ${contractFile}`);
+  if (workspaceDir) console.log(`Workspace: ${workspaceDir}`);
   console.log('');
 
   const validator = new ArchitectureValidator(contractFile);
   const result = await validator.validate();
+  if (workspaceDir) {
+    validator.validateWorkspace(workspaceDir, ignoreGlobs);
+  }
 
   // Output results
   if (result.errors.length > 0) {

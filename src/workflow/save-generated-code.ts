@@ -8,6 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { minimatch } from "minimatch";
+import { copyPlatformTemplate } from "./platform-template.js";
 
 export interface SaveCodeOptions {
   workspaceDir: string;
@@ -15,6 +16,7 @@ export interface SaveCodeOptions {
   testCode: Record<string, string>;
   allowedGlobs: string[];
   requiredFiles: string[];
+  platformFiles?: string[];
 }
 
 /**
@@ -23,11 +25,14 @@ export interface SaveCodeOptions {
  */
 export async function saveGeneratedCode(options: SaveCodeOptions): Promise<{
   savedFiles: string[];
+  skippedPlatformFiles: string[];
   errors: string[];
 }> {
   const { workspaceDir, generatedCode, testCode, allowedGlobs, requiredFiles } = options;
+  const platformFiles = (options.platformFiles || []).map((f) => path.normalize(f));
 
   const savedFiles: string[] = [];
+  const skippedPlatformFiles: string[] = [];
   const errors: string[] = [];
 
   // 모든 generated code 병합
@@ -40,6 +45,12 @@ export async function saveGeneratedCode(options: SaveCodeOptions): Promise<{
       const normalized = path.normalize(filePath);
       if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
         errors.push(`Path traversal detected: ${filePath}`);
+        continue;
+      }
+
+      // 플랫폼 제공 파일은 Agent 출력으로 덮어쓰지 않음
+      if (platformFiles.includes(normalized)) {
+        skippedPlatformFiles.push(normalized);
         continue;
       }
 
@@ -72,14 +83,16 @@ export async function saveGeneratedCode(options: SaveCodeOptions): Promise<{
     }
   }
 
-  // 4. 필수 파일 검증 (경로 정규화 후 비교)
+  // 4. 필수 파일 검증: 최종 workspace(플랫폼 제공 + Agent 생성) 기준
   const normalizedRequired = requiredFiles.map(f => path.normalize(f));
-  const missingFiles = normalizedRequired.filter(f => !savedFiles.includes(f));
+  const missingFiles = normalizedRequired.filter(
+    f => !savedFiles.includes(f) && !(platformFiles.includes(f) && fs.existsSync(path.join(workspaceDir, f)))
+  );
   if (missingFiles.length > 0) {
     errors.push(`Missing required files: ${missingFiles.join(", ")}`);
   }
 
-  return { savedFiles, errors };
+  return { savedFiles, skippedPlatformFiles, errors };
 }
 
 /**
@@ -104,9 +117,13 @@ export function readGeneratedFile(workspaceDir: string, filePath: string): strin
 /**
  * Workspace 생성 및 초기화
  */
-export function initializeWorkspace(workspaceDir: string): void {
+export function initializeWorkspace(workspaceDir: string, patternType?: string): void {
   if (!fs.existsSync(workspaceDir)) {
     fs.mkdirSync(workspaceDir, { recursive: true });
+  }
+
+  if (copyPlatformTemplate(patternType, workspaceDir).length > 0) {
+    return;
   }
 
   // package.json 기본 템플릿 (필요시)

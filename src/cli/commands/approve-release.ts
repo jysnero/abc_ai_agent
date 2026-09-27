@@ -29,7 +29,7 @@ export async function approveReleaseCommand(
     });
 
     const output = options.json
-      ? JsonFormatter.formatStart(releaseId)
+      ? JSON.stringify({ ok: true, run_id: releaseId }, null, 2)
       : `✓ Release approved: ${releaseId}`;
     return { output, exitCode: 0 };
   } catch (err) {

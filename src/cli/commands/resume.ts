@@ -1,9 +1,11 @@
 import { WorkflowRunner } from "../../workflow/workflow-runner.js";
 import { CliError, ExitCode } from "../cli-errors.js";
+import { JsonFormatter, toExternalAgentMode } from "../output/formatter.js";
 
 export interface ResumeOptions {
   "run-id": string;
   json?: boolean;
+  agentMode: string;
 }
 
 export async function resumeCommand(
@@ -16,7 +18,10 @@ export async function resumeCommand(
 
   try {
     await runner.resumeRun(options["run-id"]);
-    const output = "✓ Workflow resumed";
+    const state = (await runner.getRunStatus(options["run-id"])).status;
+    const output = options.json
+      ? JsonFormatter.formatResume(options["run-id"], state, options.agentMode)
+      : `✓ Workflow resumed\nState: ${state}\nAgent Mode: ${toExternalAgentMode(options.agentMode)}`;
     return { output, exitCode: 0 };
   } catch (err) {
     if ((err as Error).message.includes("not found")) {

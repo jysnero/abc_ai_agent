@@ -9,6 +9,7 @@ export interface StartOptions {
   spec: string;
   contract: string;
   json?: boolean;
+  agentMode: string;
 }
 
 export async function startCommand(
@@ -66,7 +67,7 @@ export async function startCommand(
   const pendingAction = derivePendingAction(manifest.status);
 
   const output = options.json
-    ? JsonFormatter.formatStart(runId, manifest, pendingAction)
+    ? JsonFormatter.formatStart(runId, manifest, pendingAction, options.agentMode)
     : HumanFormatter.formatStartMessage(runId);
 
   return { output, exitCode: 0 };

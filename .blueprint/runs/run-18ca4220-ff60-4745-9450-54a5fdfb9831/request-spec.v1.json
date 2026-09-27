@@ -1,0 +1,42 @@
+{
+  "type": "webview-component",
+  "version": "1.0",
+  "name": "OX Quiz Widget - Browser",
+  "description": "Educational OX (true/false) quiz interface for browser. No native APIs, no external services.",
+  "requirement": {
+    "summary": "Build a React OX quiz with 3 questions, immediate feedback, progress tracking, score calculation, and retry functionality.",
+    "details": [
+      "Display one question at a time out of 3 total questions",
+      "Show O (true) and X (false) answer buttons",
+      "After selecting an answer, display whether it is correct or incorrect with explanation text",
+      "Prevent further answer changes for the current question after selection",
+      "Display progress indicator (e.g., '2/3 completed') and a visual progress bar",
+      "Calculate score: 10 points per correct answer, max 30 points total",
+      "When all 3 questions are answered, show final score and summary (e.g., '2/3 correct - 20 points')",
+      "Provide a 'Retry' or 'Start Over' button that completely resets the quiz to question 1 with no answers selected and score = 0",
+      "Responsive design: optimize for mobile phones (320px) to tablets (768px)",
+      "Accessibility: keyboard navigation (Tab focus, Enter/Space to select), visible focus rings, aria-live regions for score and feedback",
+      "Color scheme: green for correct answers, red for incorrect answers, gray for neutral/unanswered states",
+      "Use system default font stack (Tailwind font-sans)",
+      "Component structure: App (main container and state), QuestionCard (displays question text), AnswerButtons (O/X buttons with disabled state), ProgressBar (text + visual), ResultScreen (final score)",
+      "State management: currentQuestionIndex, userAnswers (array of booleans), correctAnswers (array), totalScore, isComplete",
+      "Include 3 hardcoded sample quiz questions with question text, correct answer (true/false), and explanation. Questions should be educational and self-contained."
+    ]
+  },
+  "constraints": {
+    "language": "TypeScript",
+    "framework": "React 18+",
+    "style": "Tailwind CSS only",
+    "no_native_apis": true,
+    "no_external_services": true,
+    "no_login": true,
+    "no_advertisements": true,
+    "no_backend_api_calls": true
+  },
+  "expected_files": {
+    "component": "src/App.tsx",
+    "types": "src/types.ts",
+    "demo": "demo/index.html",
+    "test": "tests/Quiz.test.tsx"
+  }
+}

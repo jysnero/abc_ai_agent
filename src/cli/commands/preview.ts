@@ -16,6 +16,8 @@ export interface PreviewCommandOptions {
   json?: boolean;
 }
 
+const DEMO_ENTRY = "demo/index.html";
+
 /**
  * Simple HTTP server to serve generated artifacts
  */
@@ -33,6 +35,13 @@ function createPreviewServer(workspaceDir: string, port: number): http.Server {
 
     try {
       if (req.url === "/" || req.url === "") {
+        // Priority 0: 플랫폼 데모 mount (실제 동작 화면)
+        if (fs.existsSync(path.join(workspaceDir, DEMO_ENTRY))) {
+          res.writeHead(302, { Location: `/${DEMO_ENTRY}` });
+          res.end();
+          return;
+        }
+
         // Priority 1: Check if src/App.tsx exists (generated React component) - serve this first
         const appTsxPath = path.join(workspaceDir, "src", "App.tsx");
         if (fs.existsSync(appTsxPath)) {
@@ -236,13 +245,14 @@ export async function previewCommand(
     const server = createPreviewServer(workspaceDir, port);
 
     // Store server reference to prevent GC
+    const entryPath = fs.existsSync(path.join(workspaceDir, DEMO_ENTRY)) ? `/${DEMO_ENTRY}` : "";
     const serverRunning = () => {
       const output = {
         ok: true,
-        message: `Preview server started at http://localhost:${port}`,
+        message: `Preview server started at http://localhost:${port}${entryPath}`,
         run_id: opts["run-id"],
         workspace: workspaceDir,
-        url: `http://localhost:${port}`,
+        url: `http://localhost:${port}${entryPath}`,
         port,
         status: "running",
         stop_command: "Ctrl+C",

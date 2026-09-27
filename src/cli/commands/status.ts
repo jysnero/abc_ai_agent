@@ -6,7 +6,7 @@ import { InvalidRunIdFormatError, RunNotFoundError as StorageRunNotFoundError } 
 export interface StatusOptions {
   "run-id": string;
   json?: boolean;
-  agentMode?: string;
+  agentMode: string;
 }
 
 export async function statusCommand(
@@ -20,8 +20,8 @@ export async function statusCommand(
   try {
     const workflowStatus = await runner.getRunStatus(options["run-id"]);
     const output = options.json
-      ? JsonFormatter.formatStatus(workflowStatus, options.agentMode || "production")
-      : HumanFormatter.formatStatusMessage(workflowStatus, options.agentMode || "production");
+      ? JsonFormatter.formatStatus(workflowStatus, options.agentMode)
+      : HumanFormatter.formatStatusMessage(workflowStatus, options.agentMode);
     return { output, exitCode: 0 };
   } catch (err) {
     if (err instanceof InvalidRunIdFormatError) {

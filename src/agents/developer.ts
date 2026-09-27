@@ -10,15 +10,27 @@
  * SDK 의존성 분리: Agent Client를 통한 통신
  */
 
-import type { IAgentClient } from "../runtime/agent-client.js";
+import type { IAgentClient, RawAgentResponse, EffectiveClientConfig } from "../runtime/agent-client.js";
 import { createAgentClient } from "../runtime/agent-client.js";
 import type { ExecutionPlan } from "../orchestrator.js";
 
 export interface DeveloperAgentConfig {
   apiKey?: string;
   model?: string;
+  max_tokens?: number;
+  timeout_ms?: number;
   client?: IAgentClient;  // For dependency injection (testing)
   max_retries?: number;   // For smoke tests: override default retries
+}
+
+export type DeveloperStep = "generateCode" | "generateTests" | "selfValidate";
+
+export interface DeveloperStepRecord {
+  step: DeveloperStep;
+  api_requests_started: number;
+  outcome: "ok" | "error" | "incomplete";
+  error?: string;
+  raw: RawAgentResponse | null;
 }
 
 export interface DeveloperAgentResult {
@@ -26,20 +38,67 @@ export interface DeveloperAgentResult {
   generatedCode: Record<string, string>;
   testCode: Record<string, string>;
   selfValidation: Record<string, unknown>;
+  steps: DeveloperStepRecord[];
   errors?: string[];
 }
+
+class IncompleteResponseError extends Error {}
 
 export class DeveloperAgent {
   private client: IAgentClient;
   private model: string;
+  private steps: DeveloperStepRecord[] = [];
 
   constructor(config: DeveloperAgentConfig = {}) {
     this.client = config.client || createAgentClient({
       apiKey: config.apiKey,
-      timeout_ms: 60000,
+      model: config.model,
+      max_tokens: config.max_tokens,
+      timeout_ms: config.timeout_ms ?? 60000,
       max_retries: config.max_retries ?? 3,
     });
     this.model = config.model || "claude-opus-5-5";
+  }
+
+  getEffectiveConfig(): EffectiveClientConfig | null {
+    return this.client.getEffectiveConfig ? this.client.getEffectiveConfig() : null;
+  }
+
+  /**
+   * 단계별 API 호출: 파싱 전에 text/stop_reason/usage를 기록하고,
+   * 오류 또는 불완전 응답(stop_reason != end_turn)이면 예외로 이후 단계를 중단
+   */
+  private async callStep(step: DeveloperStep, prompt: string, systemPrompt: string): Promise<string> {
+    const record: DeveloperStepRecord = {
+      step,
+      api_requests_started: 1,
+      outcome: "ok",
+      raw: null,
+    };
+    this.steps.push(record);
+
+    try {
+      const response = await this.client.chat([{ role: "user", content: prompt }], systemPrompt);
+      record.raw = {
+        stop_reason: response.stop_reason ?? null,
+        usage: response.usage ?? null,
+        block_types: ["text"],
+        text: response.content,
+      };
+      if (response.stop_reason !== "end_turn") {
+        record.outcome = "incomplete";
+        record.error = `stop_reason=${response.stop_reason}`;
+        throw new IncompleteResponseError(`${step}: incomplete response (stop_reason=${response.stop_reason})`);
+      }
+      return response.content;
+    } catch (error) {
+      if (!(error instanceof IncompleteResponseError)) {
+        record.outcome = "error";
+        record.error = error instanceof Error ? error.message : String(error);
+        record.raw = (error as { raw?: RawAgentResponse }).raw ?? null;
+      }
+      throw error;
+    }
   }
 
   /**
@@ -61,17 +120,27 @@ export class DeveloperAgent {
   ): Promise<DeveloperAgentResult> {
     console.log(`📋 Developer Agent executing plan: ${executionPlan.contract_id}`);
 
+    this.steps = [];
     const result: DeveloperAgentResult = {
       status: "success",
       generatedCode: {},
       testCode: {},
       selfValidation: {},
+      steps: this.steps,
     };
 
     try {
       // Step 1: 코드 생성
       console.log(`\n📝 Step 1: 코드 생성 (${executionPlan.target_files.length} 파일)`);
       result.generatedCode = await this.generateCode(executionPlan, architectureContract);
+
+      const missing = executionPlan.target_files.filter((f) => !(f in result.generatedCode));
+      if (missing.length > 0) {
+        const last = this.steps[this.steps.length - 1];
+        last.outcome = "incomplete";
+        last.error = `missing target files: ${missing.join(", ")}`;
+        throw new IncompleteResponseError(`generateCode: missing target files: ${missing.join(", ")}`);
+      }
 
       // Step 2: 테스트 생성
       console.log(`\n🧪 Step 2: 테스트 생성`);
@@ -98,42 +167,36 @@ export class DeveloperAgent {
     plan: ExecutionPlan,
     contractStr: string
   ): Promise<Record<string, string>> {
-    const fileList = plan.target_files.join("\n");
+    const fileList = plan.target_files.map((f) => `- ${f}`).join("\n");
+    const platformFiles = plan.platform_files || [];
+    const platformSection = platformFiles.length > 0
+      ? `
+## Platform-Provided Files (already exist in the workspace — do NOT generate them)
+${platformFiles.map((f) => `- ${f}`).join("\n")}
+- demo/main.tsx mounts the component with \`import App from "../src/App"\`, so src/App.tsx must \`export default\` the App component.
+- Tests run with vitest (jsdom) and @testing-library/react; jest-dom matchers are preloaded. Import test APIs from "vitest".
+`
+      : "";
 
     const prompt = `
 You are a developer implementing a WebView service according to an execution plan.
 
 ## Execution Plan
 - Contract ID: ${plan.contract_id}
-- Target Files (ALL MUST BE GENERATED):
+- Target Files (generate exactly these, ALL of them):
 ${fileList}
 - Bridge Usage: ${JSON.stringify(plan.bridge_usage)}
-
+${platformSection}
 ## Architecture Contract (constraints)
 ${contractStr}
 
 ## Task
 Generate COMPLETE, production-ready code for EACH target file listed above. Do not skip any files.
 
-IMPORTANT: You MUST generate ALL the following files:
-1. Configuration files: package.json, tsconfig.json
-2. Source files: src/index.tsx, src/pages/Game.tsx
-3. Any other files listed in Target Files
-
 Output format: For each file, start with "### File: <path>" on a new line, then the complete file content.
-Generate files in this order:
-1. package.json
-2. tsconfig.json
-3. src/index.tsx
-4. src/pages/Game.tsx
 `;
 
-    const response = await this.client.chat(
-      [{ role: "user", content: prompt }],
-      "You are a professional TypeScript developer."
-    );
-
-    const content = response.content;
+    const content = await this.callStep("generateCode", prompt, "You are a professional TypeScript developer.");
 
     // 파싱: "### File: <path>"와 "### Test: <path>" 모두 지원
     const codeMap: Record<string, string> = {};
@@ -197,14 +260,14 @@ Write comprehensive test cases covering:
 
 Output format: For each test file, start with "### Test: <path>" on a new line, then the test code.
 Target files should be in tests/ directory with similar structure.
+${plan.platform_files?.length ? 'Use vitest (import { describe, it, expect, vi } from "vitest") with @testing-library/react (jsdom, jest-dom matchers preloaded). Import the component from "../src/App".' : ""}
 `;
 
-    const response = await this.client.chat(
-      [{ role: "user", content: prompt }],
+    const content = await this.callStep(
+      "generateTests",
+      prompt,
       "You are an experienced QA engineer writing comprehensive tests."
     );
-
-    const content = response.content;
 
     const testMap: Record<string, string> = {};
     const matches = content.split(/^### Test: /m);
@@ -258,12 +321,11 @@ Answer in JSON format:
 }
 `;
 
-    const response = await this.client.chat(
-      [{ role: "user", content: prompt }],
+    const content = await this.callStep(
+      "selfValidate",
+      prompt,
       "You are a code quality reviewer verifying implementation completeness."
     );
-
-    const content = response.content;
 
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);

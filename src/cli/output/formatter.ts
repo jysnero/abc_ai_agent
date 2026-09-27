@@ -16,13 +16,21 @@ export function derivePendingAction(status: string): PendingAction {
   }
 }
 
+/**
+ * 외부 출력용 agent_mode: 주입된 Agent client 종류 (fake | claude)
+ * 내부 composition 모드: test → fake, production/smoke → claude
+ */
+export function toExternalAgentMode(internalMode: string): "fake" | "claude" {
+  return internalMode === "test" ? "fake" : "claude";
+}
+
 export class HumanFormatter {
   static formatStartMessage(runId: string): string {
     return `✓ Run created: ${runId}\n  Next: approve-spec`;
   }
 
   static formatStatusMessage(status: WorkflowStatus, agentMode: string): string {
-    return `Status: ${status.status}\nAgent Mode: ${agentMode}\nBlocked: ${status.blocked}`;
+    return `Status: ${status.status}\nAgent Mode: ${toExternalAgentMode(agentMode)}\nBlocked: ${status.blocked}`;
   }
 
   static formatApprovalMessage(targetChecksum: string): string {
@@ -35,7 +43,12 @@ export class HumanFormatter {
 }
 
 export class JsonFormatter {
-  static formatStart(runId: string, manifest?: any, pendingAction?: PendingAction | null): string {
+  static formatStart(
+    runId: string,
+    manifest: any,
+    pendingAction: PendingAction | null,
+    agentMode: string
+  ): string {
     const base = { ok: true, run_id: runId };
 
     if (manifest) {
@@ -43,7 +56,7 @@ export class JsonFormatter {
         ...base,
         command: "start",
         state: manifest.status,
-        agent_mode: "fake",
+        agent_mode: toExternalAgentMode(agentMode),
         pending_action: pendingAction,
         approval_status: pendingAction ? "pending" : null,
       };
@@ -67,7 +80,17 @@ export class JsonFormatter {
       run_id: status.runId,
       state: status.status,
       blocked: status.blocked,
-      agent_mode: agentMode,
+      agent_mode: toExternalAgentMode(agentMode),
+    }, null, 2);
+  }
+
+  static formatResume(runId: string, state: string, agentMode: string): string {
+    return JSON.stringify({
+      ok: true,
+      run_id: runId,
+      command: "resume",
+      state,
+      agent_mode: toExternalAgentMode(agentMode),
     }, null, 2);
   }
 

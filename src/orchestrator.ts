@@ -53,6 +53,7 @@ export interface ExecutionPlan {
   version: string;
   request_spec_revision: string;
   target_files: string[];
+  platform_files?: string[];
   bridge_usage: Record<string, number>;
   validation_commands: Array<{
     check_id: string;

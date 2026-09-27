@@ -29,13 +29,17 @@ async function main() {
     const args = process.argv.slice(2);
     let argIndex = 0;
     let testMode = false;
+    let singleTrial = false;
     let helpFlag = false;
     let versionFlag = false;
 
-    // Parse global flags (--test-mode, --help, --version)
+    // Parse global flags (--test-mode, --single-trial, --help, --version)
     while (argIndex < args.length && args[argIndex].startsWith("-")) {
       if (args[argIndex] === "--test-mode") {
         testMode = true;
+        argIndex++;
+      } else if (args[argIndex] === "--single-trial") {
+        singleTrial = true;
         argIndex++;
       } else if (args[argIndex] === "-h" || args[argIndex] === "--help") {
         helpFlag = true;
@@ -72,7 +76,7 @@ async function main() {
     }
 
     // Create dependencies
-    const deps = createCliDependencies(testMode);
+    const deps = createCliDependencies(testMode, { singleTrial });
 
     // Command arguments (everything after command name)
     const commandArgs = args.slice(argIndex + 1);
@@ -95,6 +99,7 @@ async function main() {
           spec: opts.spec as string,
           contract: opts.contract as string,
           json: opts.json as boolean | undefined,
+          agentMode: deps.agentMode,
         });
         break;
       }
@@ -150,6 +155,7 @@ async function main() {
         result = await resumeCommand(deps.workflowRunner, {
           "run-id": opts["run-id"] as string,
           json: opts.json as boolean | undefined,
+          agentMode: deps.agentMode,
         });
         break;
       }
@@ -270,6 +276,7 @@ USAGE:
 
 GLOBAL OPTIONS:
   --test-mode        Use fake agent for testing (no real API calls)
+  --single-trial     Real API single trial: retry 0, repair 0, request timeout 180s
   -h, --help         Show this help message
   -v, --version      Show version
 

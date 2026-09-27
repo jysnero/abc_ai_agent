@@ -11,6 +11,7 @@
 
 import type { ExecutionPlan } from "../orchestrator.js";
 import { minimatch } from "minimatch";
+import { listPlatformFiles } from "../workflow/platform-template.js";
 
 export type { ExecutionPlan };
 
@@ -51,8 +52,11 @@ export interface ArchitectureContract {
 export function buildExecutionPlan(
   contract: ArchitectureContract
 ): ExecutionPlan {
-  // v0.1: required_files를 target_files로 변환 (모두 포함)
-  const targetFiles = contract.folder_structure.required_files;
+  // required_files는 최종 workspace 필수 파일. 플랫폼 템플릿 제공 파일은 Agent 생성 대상에서 제외
+  const platformFiles = listPlatformFiles(contract.pattern_type);
+  const targetFiles = contract.folder_structure.required_files.filter(
+    (f) => !platformFiles.includes(f.replace(/\\/g, "/"))
+  );
 
   // v0.1: bridge_policy의 메서드 모두를 포함 (호출 횟수는 0으로 초기화)
   const bridgeUsage: Record<string, number> = {};
@@ -65,14 +69,18 @@ export function buildExecutionPlan(
     version: contract.version,
     request_spec_revision: "",  // placeholder, set by caller
     target_files: targetFiles,
+    ...(platformFiles.length > 0 ? { platform_files: platformFiles } : {}),
     bridge_usage: bridgeUsage,
     validation_commands: [
       { check_id: "build", command: "npm run build" },
       { check_id: "test", command: "npm test" },
-      { check_id: "architecture-check", command: "node scripts/check-architecture.mjs" },
+      {
+        check_id: "architecture-check",
+        command: "node <platform>/scripts/check-architecture.mjs <run>/architecture-contract.v1.json --workspace <workspace> [--ignore <platform_file>]...",
+      },
     ],
     completion_criteria: {
-      required_files_created: targetFiles,
+      required_files_created: contract.folder_structure.required_files,
       all_validation_pass: true,
       forbidden_patterns: "block_free",
     },
