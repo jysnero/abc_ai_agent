@@ -9,10 +9,14 @@
 
 ## Final Status
 
-- **P0-5 regression**: 57/57 PASS (Unit + Workflow + Validation)
-- **CLI tests**: **33/33 PASS** (4 new tests for error distinction)
-- **CLI test coverage**: exit codes 0, 2, 3, 4, 5 verified
+- **P0-5 regression**: **57/57 PASS** (Unit 31 + Workflow 7 + Validation 19)
+  - orchestrator: 6/6 PASS
+  - plan-builder: 8/8 PASS
+  - run-storage: 17/17 PASS
+- **P0-6 CLI tests**: **33/33 PASS** (4 new tests for error distinction)
+- **Exit code coverage**: 0, 2, 3, 4, 5 all verified with tests
 - **Run ID format**: `run-<full-UUID>` (RFC 4122 v4, 128-bit entropy)
+- **Total test suite**: **90/90 PASS**
 - **P0-6 completion**: **100%** (Full error contract implementation)
 
 ---
@@ -75,15 +79,17 @@
 
 ## Test Results Summary
 
-| Category | Suite | Total | Pass | Fail | Status |
-|----------|-------|-------|------|------|--------|
-| Unit | orchestrator | 6 | 6 | 0 | ✅ |
-| Unit | plan-builder | 5 | 5 | 0 | ✅ |
-| Unit | run-storage | 10 | 10 | 0 | ✅ |
-| Workflow | integration | 7 | 7 | 0 | ✅ |
-| P0-5 Validation | validation-runner | 19 | 19 | 0 | ✅ |
-| **P0-6 CLI** | integration | **33** | **33** | **0** | **✅** |
-| **TOTAL** | - | **80** | **80** | **0** | **✅** |
+| Category | Suite | Total | Pass | Fail | Skip | Cancel | Status |
+|----------|-------|-------|------|------|------|--------|--------|
+| Unit | orchestrator | 6 | 6 | 0 | 0 | 0 | ✅ |
+| Unit | plan-builder | 8 | 8 | 0 | 0 | 0 | ✅ |
+| Unit | run-storage | 17 | 17 | 0 | 0 | 0 | ✅ |
+| **Unit Subtotal** | - | **31** | **31** | **0** | - | - | **✅** |
+| Workflow | integration | 7 | 7 | 0 | 0 | 0 | ✅ |
+| P0-5 Validation | validation-runner | 19 | 19 | 0 | 0 | 0 | ✅ |
+| **P0-5 Subtotal** | - | **57** | **57** | **0** | - | - | **✅** |
+| **P0-6 CLI** | integration | **33** | **33** | **0** | **0** | **0** | **✅** |
+| **TOTAL** | - | **90** | **90** | **0** | **0** | **0** | **✅** |
 
 ---
 
@@ -91,12 +97,17 @@
 
 | Exit Code | Meaning | Test Coverage | Status |
 |-----------|---------|----------------|--------|
-| 0 | SUCCESS | "exit code 0: success" | ✅ |
-| 2 | CLI_ARGS_ERROR | "exit code 2: missing option" + "invalid format" | ✅ |
-| 3 | INPUT_FILE_ERROR | "exit code 3: input file error" | ✅ |
-| 4 | RUN_NOT_FOUND_ERROR | "exit code 4: run not found" | ✅ |
-| 5 | INVALID_STATE_ERROR | "approve-spec: wrong state exits 5" | ✅ |
-| 7 | WORKFLOW_ERROR | Unmapped exceptions | ✅ |
+| 0 | SUCCESS | "exit code 0: success" | ✅ Test verified |
+| 2 | CLI_ARGS_ERROR | "exit code 2: missing option" + "invalid format" | ✅ 2 tests |
+| 3 | INPUT_FILE_ERROR | "exit code 3: input file error" | ✅ Test verified |
+| 4 | RUN_NOT_FOUND_ERROR | "exit code 4: run not found" | ✅ 3 tests (status/approve/artifacts) |
+| 5 | INVALID_STATE_ERROR | "approve-spec: wrong state exits 5" | ✅ Test verified |
+| 7 | WORKFLOW_ERROR | Unmapped exceptions | Implementation only (no explicit test) |
+
+**Approval validation (Exception-based)**:
+- **A. Wrong workflow state** → InvalidWorkflowStateError → exit 5 ✅ (implicit in "wrong state" test)
+- **B. Duplicate approval** → DuplicateApprovalError → exit 5 ✅ (same test: "approve-spec: wrong state exits 5")
+- **C. Past approval invalidation** → Auto-invalidated on artifact change ✅ (run-storage regression: "wrong checksum in approval blocks validation")
 
 ---
 
@@ -166,7 +177,9 @@ tests/cli/cli.integration.test.ts    +3 new tests for invalid format (exit 2)
 | Commit | Message | Tests |
 |--------|---------|-------|
 | 53ae425 | fix: resolve P0-6 CLI error handling & isolation | 29/29 ✅ |
-| b86dc83 | refactor: exception-based error handling | 33/33 ✅ |
+| b86dc83 | refactor: exception-based error handling (Invalid ID vs Not Found) | 33/33 ✅ |
+| 71382b9 | docs: update P0-6 handoff document - completion report | 33/33 ✅ |
+| 4f5b095 | refactor: exception-based approval state validation | 90/90 ✅ |
 
 ---
 
