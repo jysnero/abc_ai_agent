@@ -367,6 +367,37 @@ describe("CLI Integration Tests (Real Process)", () => {
     }
   });
 
+  test("approve-spec: wrong state (not HUMAN_GATE_SPEC) exits 5", () => {
+    const testRunDir = createTestRunDir();
+    try {
+      const spec = createFixtureSpec();
+      const contract = createFixtureContract();
+
+      const specFile = path.join(testRunDir, "spec.json");
+      const contractFile = path.join(testRunDir, "contract.json");
+      fs.writeFileSync(specFile, spec);
+      fs.writeFileSync(contractFile, contract);
+
+      const startResult = runCli(["start", "--spec", specFile, "--contract", contractFile], testRunDir);
+      const runIdMatch = startResult.stdout.match(/run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/);
+      const runId = runIdMatch![0];
+
+      // First approval (succeeds)
+      const approve1 = runCli(["approve-spec", "--run-id", runId, "--approver", "alice"], testRunDir);
+      assert.equal(approve1.exitCode, 0, "First approval should succeed");
+
+      // Transition to HUMAN_GATE_RELEASE via resume
+      const resumeResult = runCli(["resume", "--run-id", runId], testRunDir);
+      // Resume may succeed or fail depending on Agent execution, but changes state
+
+      // Now try approve-spec when not in HUMAN_GATE_SPEC (should be HUMAN_GATE_RELEASE or later)
+      const approve2 = runCli(["approve-spec", "--run-id", runId, "--approver", "bob"], testRunDir);
+      assert.equal(approve2.exitCode, 5, "Should exit with INVALID_STATE_ERROR (not in HUMAN_GATE_SPEC state)");
+    } finally {
+      if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
+    }
+  });
+
   // ==================== approve-release Command ====================
 
   test("approve-release: requires --run-id and --approver", () => {

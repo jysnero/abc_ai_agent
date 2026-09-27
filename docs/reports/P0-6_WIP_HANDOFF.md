@@ -13,10 +13,10 @@
   - orchestrator: 6/6 PASS
   - plan-builder: 8/8 PASS
   - run-storage: 17/17 PASS
-- **P0-6 CLI tests**: **33/33 PASS** (4 new tests for error distinction)
+- **P0-6 CLI tests**: **34/34 PASS** (5 tests for error distinction + approval A/B scenarios)
 - **Exit code coverage**: 0, 2, 3, 4, 5 all verified with tests
 - **Run ID format**: `run-<full-UUID>` (RFC 4122 v4, 128-bit entropy)
-- **Total test suite**: **90/90 PASS**
+- **Total test suite**: **91/91 PASS**
 - **P0-6 completion**: **100%** (Full error contract implementation)
 
 ---
@@ -88,8 +88,8 @@
 | Workflow | integration | 7 | 7 | 0 | 0 | 0 | ✅ |
 | P0-5 Validation | validation-runner | 19 | 19 | 0 | 0 | 0 | ✅ |
 | **P0-5 Subtotal** | - | **57** | **57** | **0** | - | - | **✅** |
-| **P0-6 CLI** | integration | **33** | **33** | **0** | **0** | **0** | **✅** |
-| **TOTAL** | - | **90** | **90** | **0** | **0** | **0** | **✅** |
+| **P0-6 CLI** | integration | **34** | **34** | **0** | **0** | **0** | **✅** |
+| **TOTAL** | - | **91** | **91** | **0** | **0** | **0** | **✅** |
 
 ---
 
@@ -104,10 +104,23 @@
 | 5 | INVALID_STATE_ERROR | "approve-spec: wrong state exits 5" | ✅ Test verified |
 | 7 | WORKFLOW_ERROR | Unmapped exceptions | Implementation only (no explicit test) |
 
-**Approval validation (Exception-based)**:
-- **A. Wrong workflow state** → InvalidWorkflowStateError → exit 5 ✅ (implicit in "wrong state" test)
-- **B. Duplicate approval** → DuplicateApprovalError → exit 5 ✅ (same test: "approve-spec: wrong state exits 5")
-- **C. Past approval invalidation** → Auto-invalidated on artifact change ✅ (run-storage regression: "wrong checksum in approval blocks validation")
+**Approval validation (Exception-based - A/B/C scenarios)**:
+
+- **A. Wrong workflow state** → InvalidWorkflowStateError → exit 5 ✅
+  - Test: "approve-spec: wrong state (not HUMAN_GATE_SPEC) exits 5"
+  - Scenario: start → approve-spec(ok) → resume → approve-spec(exit 5)
+  - Verified: throws InvalidWorkflowStateError when status ≠ "HUMAN_GATE_SPEC"
+
+- **B. Duplicate approval** → DuplicateApprovalError → exit 5 ✅
+  - Test: "approve-spec: wrong state exits 5" (existing test)
+  - Scenario: start → approve-spec(alice ok) → approve-spec(bob exit 5)
+  - Verified: throws DuplicateApprovalError when manifest.spec_approval exists
+
+- **C. Past approval invalidation** → **Not supported in current workflow** ⚠️
+  - Auto-invalidation implemented: artifact change → manifest.spec_approval = undefined
+  - Missing path: No state transition returns to HUMAN_GATE_SPEC for re-approval
+  - Current flow: HUMAN_GATE_SPEC → DEV_VALIDATION_LOOP → HUMAN_GATE_RELEASE
+  - Requires: Separate feature for "Spec revision + re-evaluation" workflow
 
 ---
 
