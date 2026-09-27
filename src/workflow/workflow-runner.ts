@@ -356,12 +356,13 @@ export class WorkflowRunner {
       );
     }
 
-    // Auto-repair loop (최대 3회, smoke 모드에서는 0회)
+    // Auto-repair loop (최대 3회, smoke/no-repair 모드에서는 0회)
     let finalDevResultJson = devResultJson;
     let finalValidationReport = initialValidationReport;
     let repairAttempt = 0;
     const isSmokeTest = process.env.SMOKE_TEST === "true";
-    const maxRepairAttempts = isSmokeTest ? 0 : 3;
+    const isNoRepair = process.env.NO_REPAIR === "true";
+    const maxRepairAttempts = (isSmokeTest || isNoRepair) ? 0 : 3;
 
     while (
       finalValidationReport.failed_checks > 0 &&

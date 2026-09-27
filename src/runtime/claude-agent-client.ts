@@ -45,9 +45,10 @@ export class ClaudeAgentClient implements IAgentClient {
 
     for (let attempt = 0; attempt <= this.config.max_retries; attempt++) {
       try {
+        console.log(`[ClaudeAgentClient] chat attempt ${attempt + 1}/${this.config.max_retries + 1}, apiKey=${this.config.apiKey ? 'set' : 'unset'}`);
         const response = await this.client.messages.create({
-          model: "claude-opus-4-1",
-          max_tokens: 4096,
+          model: "claude-opus-5-5",
+          max_tokens: 8192,
           system: systemPrompt,
           messages: messages.map((msg) => ({
             role: msg.role,
@@ -55,10 +56,12 @@ export class ClaudeAgentClient implements IAgentClient {
           })),
         });
 
-        // 응답 추출
-        const content =
-          response.content[0].type === "text" ? response.content[0].text : "";
+        // 응답 추출 (Extended Thinking 지원: thinking + text 콘텐츠)
+        const textBlock = response.content.find((block: any) => block.type === "text");
+        const content = textBlock && textBlock.type === "text" ? textBlock.text : "";
 
+        const blockTypes = response.content.map((b: any) => `${b.type}(${b.type === "text" ? b.text.length : 0})`).join(", ");
+        console.log(`[ClaudeAgentClient] success! blocks=[${blockTypes}], text_found=${!!textBlock}, content.length=${content.length}, tokens: input=${response.usage.input_tokens}, output=${response.usage.output_tokens}`);
         return {
           content,
           stop_reason: response.stop_reason as "end_turn" | "max_tokens" | "stop_sequence",

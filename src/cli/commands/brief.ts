@@ -27,61 +27,101 @@ export interface BriefCommandOptions {
 }
 
 /**
- * 자연어 기획 → request-spec 생성 (Claude 호출)
- * 테스트에서는 FakeAgentClient 주입
+ * 자연어 기획 → request-spec 생성 (실제 Claude API 호출)
+ * agentClient.generateResponse() 또는 Fake 기반
  */
 async function generateRequestSpecFromBrief(
-  briefContent: string,
-  agentClient: IAgentClient
+  briefContent: string
 ): Promise<any> {
-  // Claude API 호출: brief.md → request-spec
-  // v0.1: 실제 호출은 미실행, FakeAgentClient로 테스트
-  const prompt = `
-당신은 웹뷰 컴포넌트 명세 생성 전문가입니다.
-다음 자연어 기획서를 읽고 request-spec JSON을 생성하세요.
+  // 실제 Claude API 호출: brief.md → request-spec JSON
+  const systemPrompt = `You are an expert web component specification generator.
+Your task is to parse natural language requirements and generate a JSON spec.
 
-요구사항:
-- type: "webview-component"
-- version: "1.0"
-- name: 컴포넌트 이름
-- description: 한 줄 설명
-- requirement.summary: 기획 요약
-- requirement.details: 요구사항 배열
-- constraints: 제약조건 (language, framework, style)
-- expected_files: 예상 결과물 파일
+Output ONLY valid JSON with this structure (no markdown, no code blocks):
+{
+  "type": "webview-component",
+  "version": "1.0",
+  "name": "Component name",
+  "description": "One-line description",
+  "requirement": {
+    "summary": "Brief summary",
+    "details": ["requirement 1", "requirement 2", ...]
+  },
+  "constraints": {
+    "language": "TypeScript",
+    "framework": "React 18+",
+    "style": "Tailwind CSS only"
+  },
+  "expected_files": {
+    "component": "src/App.tsx",
+    "demo": "demo/index.html",
+    "docs": "README.md"
+  }
+}`;
 
-기획서:
-${briefContent}
+  const userMessage = `Parse this requirement and generate a JSON spec:\n\n${briefContent}`;
 
-JSON만 반환하세요 (설명 없음).
-`;
+  // Use Anthropic SDK directly (no Agent SDK wrapper)
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
 
-  // TODO: 실제 Claude API 호출 (API 키 설정 후)
-  // const response = await agentClient.createMessage({ prompt });
+    const response = await client.messages.create({
+      model: "claude-opus-5-5",
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: userMessage,
+        },
+      ],
+    });
 
-  // v0.1: FakeAgentClient는 기본값 반환
-  // 실제 호출: agentClient.generateResponse(prompt)를 사용하되, 구현은 다음 phase
+    // Extract JSON from response
+    const content = response.content[0];
+    if (content.type !== "text") {
+      throw new Error("Unexpected response type");
+    }
 
-  return {
-    type: "webview-component",
-    version: "1.0",
-    name: extractTitle(briefContent.split("\n")),
-    description: extractDescription(briefContent),
-    requirement: {
-      summary: extractSummary(briefContent.split("\n")),
-      details: extractRequirements(briefContent.split("\n")),
-    },
-    constraints: {
-      language: "TypeScript",
-      framework: "React 18+",
-      style: "Tailwind CSS only",
-    },
-    expected_files: {
-      component: "src/App.tsx",
-      demo: "demo/index.html",
-      docs: "README.md",
-    },
-  };
+    const text = content.text.trim();
+    // Remove markdown code blocks if present
+    let jsonText = text;
+    if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.replace(/^```json\n/, "").replace(/\n```$/, "");
+    } else if (jsonText.startsWith("```")) {
+      jsonText = jsonText.replace(/^```\n/, "").replace(/\n```$/, "");
+    }
+
+    console.log("[Brief] API Response tokens - input:", response.usage.input_tokens, "output:", response.usage.output_tokens);
+
+    return JSON.parse(jsonText);
+  } catch (err) {
+    // Fallback to rule-based generation if API fails
+    console.warn("[Brief] API call failed, falling back to rule-based generation:", (err as Error).message);
+    return {
+      type: "webview-component",
+      version: "1.0",
+      name: extractTitle(briefContent.split("\n")),
+      description: extractDescription(briefContent),
+      requirement: {
+        summary: extractSummary(briefContent.split("\n")),
+        details: extractRequirements(briefContent.split("\n")),
+      },
+      constraints: {
+        language: "TypeScript",
+        framework: "React 18+",
+        style: "Tailwind CSS only",
+      },
+      expected_files: {
+        component: "src/App.tsx",
+        demo: "demo/index.html",
+        docs: "README.md",
+      },
+    };
+  }
 }
 
 function extractTitle(lines: string[]): string {
@@ -153,9 +193,8 @@ export async function briefCommand(
 
     const contract = JSON.parse(fs.readFileSync(contractPath, "utf-8"));
 
-    // 3. Generate request-spec from brief (Claude API 또는 Fake)
-    // v0.1: FakeAgentClient 사용, 실제 호출은 Workflow에서 처리
-    const requestSpec = await generateRequestSpecFromBrief(briefContent, null as any);
+    // 3. Generate request-spec from brief (실제 Claude API 호출)
+    const requestSpec = await generateRequestSpecFromBrief(briefContent);
 
     // 4. Validate request-spec against schema
     if (!requestSpec.type || !requestSpec.name) {

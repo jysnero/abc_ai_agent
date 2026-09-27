@@ -5,6 +5,7 @@
  * Entry point for running workflows
  */
 
+import { config } from "dotenv";
 import { parseArgs } from "util";
 import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
@@ -17,6 +18,9 @@ import { previewCommand } from "./commands/preview.js";
 import { createCliDependencies } from "./composition.js";
 import { CliError, ExitCode } from "./cli-errors.js";
 import { JsonFormatter } from "./output/formatter.js";
+
+// Load .env file
+config();
 
 const VERSION = "0.1.0";
 

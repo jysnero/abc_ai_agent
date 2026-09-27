@@ -34,12 +34,13 @@ export class DeveloperAgent {
   private model: string;
 
   constructor(config: DeveloperAgentConfig = {}) {
+    console.log(`[Developer] Initializing with config: apiKey=${config.apiKey ? 'set' : 'unset'}, client=${config.client ? 'provided' : 'will-create'}`);
     this.client = config.client || createAgentClient({
       apiKey: config.apiKey,
       timeout_ms: 60000,
       max_retries: config.max_retries ?? 3,
     });
-    this.model = config.model || "claude-opus-4-1";
+    this.model = config.model || "claude-opus-5-5";
   }
 
   /**
@@ -105,15 +106,27 @@ You are a developer implementing a WebView service according to an execution pla
 
 ## Execution Plan
 - Contract ID: ${plan.contract_id}
-- Target Files: ${fileList}
+- Target Files (ALL MUST BE GENERATED):
+${fileList}
 - Bridge Usage: ${JSON.stringify(plan.bridge_usage)}
 
 ## Architecture Contract (constraints)
 ${contractStr}
 
 ## Task
-Generate complete, production-ready code for each target file. Follow the architecture contract constraints strictly.
-Output format: For each file, start with "### File: <path>" on a new line, then the code.
+Generate COMPLETE, production-ready code for EACH target file listed above. Do not skip any files.
+
+IMPORTANT: You MUST generate ALL the following files:
+1. Configuration files: package.json, tsconfig.json
+2. Source files: src/index.tsx, src/pages/Game.tsx
+3. Any other files listed in Target Files
+
+Output format: For each file, start with "### File: <path>" on a new line, then the complete file content.
+Generate files in this order:
+1. package.json
+2. tsconfig.json
+3. src/index.tsx
+4. src/pages/Game.tsx
 `;
 
     const response = await this.client.chat(
@@ -122,6 +135,23 @@ Output format: For each file, start with "### File: <path>" on a new line, then 
     );
 
     const content = response.content;
+    console.log(`[Developer] generateCode response length: ${content.length}, preview: ${content.substring(0, 500)}`);
+
+    // Debug: Save full response to temp file
+    try {
+      const fs = await import("fs");
+      const os = await import("os");
+      const path = await import("path");
+      const tempDir = path.join(os.tmpdir(), "claude-debug");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      const tempFile = path.join(tempDir, `claude-response-${Date.now()}.txt`);
+      fs.writeFileSync(tempFile, content, "utf-8");
+      console.log(`[Developer] Full response saved to ${tempFile}`);
+    } catch (err) {
+      console.log(`[Developer] Failed to save debug response: ${err}`);
+    }
 
     // 파싱: "### File: <path>"와 "### Test: <path>" 모두 지원
     const codeMap: Record<string, string> = {};
