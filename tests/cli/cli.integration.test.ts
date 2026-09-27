@@ -317,7 +317,7 @@ describe("CLI Integration Tests (Real Process)", () => {
     }
   });
 
-  test("approve-spec: wrong state exits 5", () => {
+  test("approve-spec: duplicate approval exits 5", () => {
     const testRunDir = createTestRunDir();
     try {
       const spec = createFixtureSpec();
@@ -332,13 +332,13 @@ describe("CLI Integration Tests (Real Process)", () => {
       const runIdMatch = startResult.stdout.match(/run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/);
       const runId = runIdMatch![0];
 
-      // Approve once
+      // First approval (B scenario - valid initial approval)
       const first = runCli(["approve-spec", "--run-id", runId, "--approver", "alice"], testRunDir);
       assert.equal(first.exitCode, 0, "First approval should succeed");
 
-      // Try to approve again (should fail)
+      // Second approval attempt (B scenario - duplicate approval blocked)
       const second = runCli(["approve-spec", "--run-id", runId, "--approver", "bob"], testRunDir);
-      assert.equal(second.exitCode, 5, "Should exit with INVALID_STATE_ERROR");
+      assert.equal(second.exitCode, 5, "Should exit with INVALID_STATE_ERROR (duplicate approval)");
     } finally {
       if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
     }

@@ -112,7 +112,7 @@
   - Verified: throws InvalidWorkflowStateError when status ≠ "HUMAN_GATE_SPEC"
 
 - **B. Duplicate approval** → DuplicateApprovalError → exit 5 ✅
-  - Test: "approve-spec: wrong state exits 5" (existing test)
+  - Test: "approve-spec: duplicate approval exits 5" (existing test)
   - Scenario: start → approve-spec(alice ok) → approve-spec(bob exit 5)
   - Verified: throws DuplicateApprovalError when manifest.spec_approval exists
 
