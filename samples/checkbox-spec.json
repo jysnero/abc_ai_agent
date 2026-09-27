@@ -1,0 +1,115 @@
+{
+  "type": "webview-component",
+  "version": "1.0",
+  "name": "React Checkbox Component",
+  "description": "Create a reusable React checkbox component with accessibility support",
+  "requirement": {
+    "summary": "Implement a TypeScript React checkbox component with WCAG 2.1 AA accessibility",
+    "details": [
+      "Create a named export function Checkbox with TypeScript support",
+      "Implement component interface with checked, onChange, label, disabled props",
+      "Support keyboard navigation (Space bar to toggle)",
+      "Implement proper ARIA labels and checked attributes",
+      "Ensure styling works with Tailwind CSS",
+      "Write comprehensive unit tests with >80% code coverage",
+      "Ensure TypeScript compilation without errors",
+      "Document component usage in README"
+    ]
+  },
+  "constraints": {
+    "language": "TypeScript",
+    "framework": "React",
+    "version_react": ">=18.0.0",
+    "style": "Tailwind CSS",
+    "accessibility": "WCAG 2.1 AA",
+    "test_framework": "vitest",
+    "testing_library": "react-testing-library"
+  },
+  "expected_structure": {
+    "component": "src/components/Checkbox.tsx",
+    "types": "src/components/Checkbox.types.ts",
+    "test": "src/components/Checkbox.test.tsx",
+    "readme": "README.md",
+    "config": "package.json (optional updates)"
+  },
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "description": "Component exports named export 'Checkbox'",
+      "verification": "import { Checkbox } from './Checkbox' succeeds"
+    },
+    {
+      "id": "AC-2",
+      "description": "Props interface includes: checked (boolean), onChange (function), label (string), disabled (boolean)",
+      "verification": "TypeScript types match interface definition"
+    },
+    {
+      "id": "AC-3",
+      "description": "Keyboard support: Space bar toggles checked state",
+      "verification": "Test fires keypress event with Space key"
+    },
+    {
+      "id": "AC-4",
+      "description": "Accessibility: aria-label and aria-checked attributes present",
+      "verification": "DOM inspection confirms attributes exist"
+    },
+    {
+      "id": "AC-5",
+      "description": "Unit tests: >80% code coverage",
+      "verification": "Coverage report shows >= 80%"
+    },
+    {
+      "id": "AC-6",
+      "description": "TypeScript: Compilation without errors",
+      "verification": "tsc --noEmit exits with 0"
+    },
+    {
+      "id": "AC-7",
+      "description": "Styling: Works with Tailwind CSS",
+      "verification": "Classes like bg-blue-500 apply correctly"
+    },
+    {
+      "id": "AC-8",
+      "description": "Documentation: README includes usage example",
+      "verification": "README.md contains code example"
+    }
+  ],
+  "dependencies": {
+    "production": {
+      "react": "^18.0.0",
+      "typescript": "^5.0.0"
+    },
+    "development": {
+      "vitest": "^1.0.0",
+      "react-testing-library": "^14.0.0",
+      "@testing-library/user-event": "^14.0.0",
+      "tailwindcss": "^3.0.0"
+    }
+  },
+  "validation_commands": {
+    "build": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "lint": "eslint src/",
+    "all": "npm run build && npm run test && npm run lint"
+  },
+  "success_markers": {
+    "files_exist": [
+      "src/components/Checkbox.tsx",
+      "src/components/Checkbox.types.ts",
+      "src/components/Checkbox.test.tsx",
+      "README.md"
+    ],
+    "build_success": true,
+    "test_coverage_min": 80,
+    "test_pass_rate": 100,
+    "lint_errors": 0,
+    "typescript_errors": 0
+  },
+  "estimated_api_calls": {
+    "developer_agent": 1,
+    "validation_runner": 1,
+    "repair_attempts": 0,
+    "total": 2,
+    "estimated_tokens": "15000-25000"
+  }
+}
