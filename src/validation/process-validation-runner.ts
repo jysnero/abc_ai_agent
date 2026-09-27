@@ -92,6 +92,21 @@ export class ProcessValidationRunner implements IValidationRunner {
     );
   }
 
+  /**
+   * Workspace 기본 경로 설정 (runtime에 변경 가능)
+   * 주로 workflow에서 생성된 workspace 경로를 설정하기 위해 사용
+   */
+  setBaseRoot(newBaseRoot: string): void {
+    this.baseRoot = newBaseRoot;
+  }
+
+  /**
+   * 현재 기본 경로 조회
+   */
+  getBaseRoot(): string {
+    return this.baseRoot;
+  }
+
   async runCheck(
     checkId: string,
     artifactChecksum?: string

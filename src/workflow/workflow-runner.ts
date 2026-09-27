@@ -299,11 +299,13 @@ export class WorkflowRunner {
       "build",
     ];
 
-    // Workspace 기반 검증 실행
-    const { ProcessValidationRunner } = await import("../validation/process-validation-runner.js");
-    const workspaceValidationRunner = new ProcessValidationRunner(workspaceDir);
+    // Workspace 경로를 validationRunner에 설정
+    // (테스트는 FakeValidationRunner 주입, 프로덕션은 ProcessValidationRunner)
+    if ("setBaseRoot" in this.validationRunner && typeof this.validationRunner.setBaseRoot === "function") {
+      (this.validationRunner as any).setBaseRoot(workspaceDir);
+    }
 
-    const initialValidationReport = await workspaceValidationRunner.runSuite(
+    const initialValidationReport = await this.validationRunner.runSuite(
       checkIds,
       calculateChecksum(devResultJson)
     );
