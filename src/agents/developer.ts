@@ -18,6 +18,7 @@ export interface DeveloperAgentConfig {
   apiKey?: string;
   model?: string;
   client?: IAgentClient;  // For dependency injection (testing)
+  max_retries?: number;   // For smoke tests: override default retries
 }
 
 export interface DeveloperAgentResult {
@@ -36,7 +37,7 @@ export class DeveloperAgent {
     this.client = config.client || createAgentClient({
       apiKey: config.apiKey,
       timeout_ms: 60000,
-      max_retries: 3,
+      max_retries: config.max_retries ?? 3,
     });
     this.model = config.model || "claude-opus-4-1";
   }

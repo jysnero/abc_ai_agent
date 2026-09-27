@@ -13,9 +13,15 @@ export function createCliDependencies(testMode: boolean): CliDependencies {
   const orchestrator = createOrchestrator();
 
   // Create DeveloperAgent with appropriate client based on mode
+  const isSmokeTest = process.env.SMOKE_TEST === "true";
   const devConfig: DeveloperAgentConfig = testMode
     ? { client: new FakeAgentClient() }
-    : { apiKey: process.env.ANTHROPIC_API_KEY };
+    : {
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        // For smoke test: disable retries for first-failure-fast behavior
+        // For production: use default 3 retries
+        max_retries: isSmokeTest ? 0 : 3,
+      };
 
   const developerAgent = new DeveloperAgent(devConfig);
   const validationRunner = new ProcessValidationRunner();
@@ -23,6 +29,6 @@ export function createCliDependencies(testMode: boolean): CliDependencies {
 
   return {
     workflowRunner: runner,
-    agentMode: testMode ? "test" : "production",
+    agentMode: testMode ? "test" : isSmokeTest ? "smoke" : "production",
   };
 }
