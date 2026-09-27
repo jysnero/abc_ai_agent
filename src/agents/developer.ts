@@ -10,7 +10,8 @@
  * SDK 의존성 분리: Agent Client를 통한 통신
  */
 
-import type { IAgentClient, RawAgentResponse, EffectiveClientConfig } from "../runtime/agent-client.js";
+import type { IAgentClient, RawAgentResponse, EffectiveClientConfig, ChatOptions } from "../runtime/agent-client.js";
+import type { ExecutionLimits } from "../workflow/execution-limits.js";
 import { createAgentClient } from "../runtime/agent-client.js";
 import type { ExecutionPlan } from "../orchestrator.js";
 
@@ -31,6 +32,7 @@ export interface DeveloperStepRecord {
   outcome: "ok" | "error" | "incomplete";
   error?: string;
   prompt: { system: string; user: string };
+  applied_options: ChatOptions | null;
   raw: RawAgentResponse | null;
 }
 
@@ -41,6 +43,7 @@ export interface GenerationContext {
   requestSpec?: string;
   uiGuide?: string | null;
   designTokens?: string | null;
+  limits?: ExecutionLimits | null;
 }
 
 function contextSections(ctx: GenerationContext): string {
@@ -130,17 +133,34 @@ export class DeveloperAgent {
    * 오류 또는 불완전 응답(stop_reason != end_turn)이면 예외로 이후 단계를 중단
    */
   private async callStep(step: DeveloperStep, prompt: string, systemPrompt: string): Promise<string> {
+    const limits = this.context.limits;
+    if (limits && this.steps.length >= limits.max_logical_calls) {
+      throw new IncompleteResponseError(`${step}: max_logical_calls (${limits.max_logical_calls}) reached`);
+    }
+    const options: ChatOptions | null = limits
+      ? {
+          model: limits.model,
+          max_tokens: limits.steps[step].max_tokens,
+          timeout_ms: limits.steps[step].timeout_ms,
+          max_retries: limits.app_max_retries,
+        }
+      : null;
     const record: DeveloperStepRecord = {
       step,
       api_requests_started: 1,
       outcome: "ok",
       prompt: { system: systemPrompt, user: prompt },
+      applied_options: options,
       raw: null,
     };
     this.steps.push(record);
 
     try {
-      const response = await this.client.chat([{ role: "user", content: prompt }], systemPrompt);
+      const response = await this.client.chat(
+        [{ role: "user", content: prompt }],
+        systemPrompt,
+        options ?? undefined
+      );
       record.raw = {
         stop_reason: response.stop_reason ?? null,
         usage: response.usage ?? null,

@@ -156,6 +156,13 @@ DONE / ESCALATED (종료 또는 에스컬레이션)
 
 **v0.1 범위**: DEV_QA_LOOP (Developer Agent만 구현), 사람 승인 게이트 2곳
 
+### 커밋 대상 규칙
+
+- 원격 저장소(`jysnero/abc_ai_agent`)는 **공개(public)** 저장소입니다.
+- 실행 산출물(`.blueprint/runs`, `.blueprint/workspace`, `.blueprint/recovery`, `workspace/`)은 `.gitignore` 대상입니다. 재현에 필요한 자료만 민감정보를 제거한 fixture나 보고서로 커밋합니다.
+- 기획 초안·요구사항·업무 문서는 공개 가능 여부를 확인한 뒤에만 커밋합니다.
+- API 키·인증정보·개인정보는 커밋하지 않습니다.
+
 ### 커밋 메시지 규칙
 
 ```

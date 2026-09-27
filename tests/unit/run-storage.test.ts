@@ -16,6 +16,7 @@ import {
   transitionState,
   recordSpecApproval,
   validateChecksumFormat,
+  computeSpecApprovalComponents,
 } from "../../src/storage/run-storage.js";
 
 const TEST_RUN_ID = "run-12345678-1234-1234-1234-123456789012";
@@ -105,16 +106,10 @@ test("Run Storage: transitionState records state change and validates approvals"
   // Continue to ARCH_CONTRACT
   await transitionState(TEST_RUN_ID, "ARCH_CONTRACT");
 
-  // Load actual checksum from manifest (set by initializeRun -> saveArtifact)
-  const manifest = await loadManifest(TEST_RUN_ID);
-  const requestSpecChecksum = manifest.request_spec_revision!;
-
-  // Record SPEC approval with actual checksums
-  await recordSpecApproval(TEST_RUN_ID, "test-approver", {
-    request_spec: requestSpecChecksum,
-    architecture_contract: "sha256:def",
-    execution_plan: "sha256:ghi",
-  });
+  // Save real approval-target artifacts and approve with their actual checksums
+  await saveArtifact(TEST_RUN_ID, "architecture-contract", JSON.stringify({ contract_id: "c" }));
+  await saveArtifact(TEST_RUN_ID, "execution-plan", JSON.stringify({ target_files: [] }));
+  await recordSpecApproval(TEST_RUN_ID, "test-approver", await computeSpecApprovalComponents(TEST_RUN_ID));
 
   // Transition to DEV_VALIDATION_LOOP requires SPEC approval
   await transitionState(TEST_RUN_ID, "PLAN_BUILD");
@@ -240,11 +235,11 @@ test("Run Storage: wrong checksum in approval blocks validation", async () => {
     execution_plan: "sha256:ghi",
   });
 
-  // Transition to DEV_VALIDATION_LOOP should invalidate approval due to checksum mismatch
-  // (checksum validation happens only at DEV_VALIDATION_LOOP transition)
-  const manifestAfter = await transitionState(TEST_RUN_ID, "DEV_VALIDATION_LOOP");
-
+  // Transition to DEV_VALIDATION_LOOP must be blocked and the approval invalidated on checksum mismatch
+  await assert.rejects(transitionState(TEST_RUN_ID, "DEV_VALIDATION_LOOP"), /checksum mismatch/);
+  const manifestAfter = await loadManifest(TEST_RUN_ID);
   assert(!manifestAfter.spec_approval, "Spec approval should be invalidated due to checksum mismatch");
+  assert.equal(manifestAfter.status, "HUMAN_GATE_SPEC", "Transition must not happen");
 
   await cleanup();
 });
@@ -424,26 +419,15 @@ test("Run Storage: approval rejects truncated 16-char checksum", async () => {
   // Try to record approval with legacy 16-char checksum format
   const legacyChecksum = "sha256:3b6ba9271e65ba6a"; // Legacy truncated format
 
-  try {
-    await recordSpecApproval(TEST_RUN_ID, "test-approver", {
-      request_spec: legacyChecksum,
-      architecture_contract: "sha256:def" + "0".repeat(60),
-      execution_plan: "sha256:ghi" + "0".repeat(61),
-    });
+  await recordSpecApproval(TEST_RUN_ID, "test-approver", {
+    request_spec: legacyChecksum,
+    architecture_contract: "sha256:def" + "0".repeat(60),
+    execution_plan: "sha256:ghi" + "0".repeat(61),
+  });
 
-    // Transition should reject due to checksum validation
-    const manifestAfter = await transitionState(TEST_RUN_ID, "DEV_VALIDATION_LOOP");
-    assert(
-      !manifestAfter.spec_approval,
-      "Spec approval should be invalidated due to legacy truncated checksum format"
-    );
-  } catch (error) {
-    // Approval may fail during recordSpecApproval - both behaviors are acceptable
-    assert(
-      String(error).includes("checksum") || String(error).includes("INVALID"),
-      "Should fail with checksum-related error"
-    );
-  }
+  // Transition must be rejected and the approval invalidated
+  await assert.rejects(transitionState(TEST_RUN_ID, "DEV_VALIDATION_LOOP"), /checksum mismatch/);
+  assert(!(await loadManifest(TEST_RUN_ID)).spec_approval, "Legacy truncated checksum approval should be invalidated");
 
   await cleanup();
 });
@@ -474,12 +458,14 @@ test("Run Storage: single byte change invalidates approval", async () => {
   const corrupted = modified + " ";
   fs.writeFileSync(specPath, corrupted);
 
-  // Transition should detect checksum mismatch and invalidate approval
-  const manifestAfter = await transitionState(TEST_RUN_ID, "DEV_VALIDATION_LOOP");
+  // Transition should detect checksum mismatch, invalidate approval and not proceed
+  await assert.rejects(transitionState(TEST_RUN_ID, "DEV_VALIDATION_LOOP"), /checksum mismatch.*request_spec/);
+  const manifestAfter = await loadManifest(TEST_RUN_ID);
   assert(
     !manifestAfter.spec_approval,
     "Spec approval should be invalidated when artifact is modified (even one byte)"
   );
+  assert.equal(manifestAfter.status, "HUMAN_GATE_SPEC");
 
   await cleanup();
 });

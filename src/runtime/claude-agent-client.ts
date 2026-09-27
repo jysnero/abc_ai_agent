@@ -13,6 +13,7 @@ import type {
   AgentResponse,
   EffectiveClientConfig,
   RawAgentResponse,
+  ChatOptions,
 } from "./agent-client.js";
 
 /**
@@ -54,22 +55,28 @@ export class ClaudeAgentClient implements IAgentClient {
    */
   async chat(
     messages: AgentMessage[],
-    systemPrompt?: string
+    systemPrompt?: string,
+    options: ChatOptions = {}
   ): Promise<AgentResponse> {
     let lastError: Error | null = null;
+    const maxRetries = options.max_retries ?? this.config.max_retries;
 
-    for (let attempt = 0; attempt <= this.config.max_retries; attempt++) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[ClaudeAgentClient] chat attempt ${attempt + 1}/${this.config.max_retries + 1}, apiKey=${this.config.apiKey ? 'set' : 'unset'}`);
-        const response = await this.client.messages.create({
-          model: this.config.model,
-          max_tokens: this.config.max_tokens,
-          system: systemPrompt,
-          messages: messages.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-        });
+        console.log(`[ClaudeAgentClient] chat attempt ${attempt + 1}/${maxRetries + 1}, apiKey=${this.config.apiKey ? 'set' : 'unset'}`);
+        const response = await this.client.messages.create(
+          {
+            model: options.model ?? this.config.model,
+            max_tokens: options.max_tokens ?? this.config.max_tokens,
+            system: systemPrompt,
+            messages: messages.map((msg) => ({
+              role: msg.role,
+              content: msg.content,
+            })),
+          },
+          // 요청 단위 timeout을 명시하고 SDK 재시도는 항상 0
+          { timeout: options.timeout_ms ?? this.config.timeout_ms, maxRetries: 0 }
+        );
 
         // 응답 추출: 모든 text 블록을 순서대로 연결 (thinking 제외)
         const textBlocks = response.content.filter(
@@ -125,7 +132,7 @@ export class ClaudeAgentClient implements IAgentClient {
         }
 
         // 마지막 시도가 아니면 대기 후 재시도
-        if (attempt < this.config.max_retries) {
+        if (attempt < maxRetries) {
           const delay = this.config.retry_delay_ms * Math.pow(2, attempt);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
@@ -133,7 +140,7 @@ export class ClaudeAgentClient implements IAgentClient {
     }
 
     throw new Error(
-      `Agent chat failed after ${this.config.max_retries} retries: ${lastError?.message}`
+      `Agent chat failed after ${maxRetries} retries: ${lastError?.message}`
     );
   }
 

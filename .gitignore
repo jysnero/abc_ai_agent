@@ -7,3 +7,11 @@ dist/
 .vscode/
 .idea/
 .claude/
+
+# 실행 산출물: 기본 커밋 대상 아님 (재현에 필요한 자료는 정제된 fixture/보고서로 따로 관리)
+# 이미 추적 중인 과거 파일은 그대로 두며, 이력 재작성은 하지 않는다
+.blueprint/runs/
+.blueprint/workspace/
+.blueprint/recovery/
+workspace/
+.test-workflow-*-tmp/

@@ -29,6 +29,12 @@ import { calculateChecksum } from "../validation/validation-runner.js";
 import { DeveloperAgent } from "../agents/developer.js";
 import { autoRepair } from "../agents/repair-agent.js";
 import { loadDesignContext, resolveArchitectureChecker } from "./platform-template.js";
+import {
+  computeSpecApprovalComponents,
+  computeApprovalTargetChecksum,
+  diffApprovalComponents,
+} from "../storage/run-storage.js";
+import { parseExecutionLimits, type ExecutionLimits } from "./execution-limits.js";
 
 // Run storage 기본 디렉터리 조회
 function getRunsBaseDir(): string {
@@ -54,11 +60,13 @@ export function buildArchitectureCheckCommand(
 export interface WorkflowInput {
   requestSpec: string;        // JSON 문자열
   architectureContract: string; // JSON 문자열
+  executionLimits?: string;   // JSON 문자열 (run 전용 단계별 실행 한도)
 }
 
 export interface WorkflowApproval {
   approver: string;
   comment?: string;
+  expectedChecksum?: string;
 }
 
 export interface WorkflowStatus {
@@ -166,26 +174,20 @@ export class WorkflowRunner {
     // Plan 저장
     await saveArtifact(requestId, "execution-plan", JSON.stringify(executionPlan, null, 2));
 
-    // Approval target 생성 (모든 artifact 저장 후)
-    // 최신 manifest 재로드해서 stale overwrite 방지
-    const manifest = await loadManifest(requestId);
-    const specChecksum = manifest.request_spec_revision;
-    const contractChecksum = manifest.architecture_contract_revision;
-    const planChecksum = manifest.execution_plan_revision;
-
-    if (!specChecksum || !contractChecksum || !planChecksum) {
-      throw new Error(
-        `Missing artifact checksums: spec=${specChecksum}, contract=${contractChecksum}, plan=${planChecksum}`
-      );
+    // Run 전용 실행 한도 (승인 대상에 포함)
+    if (input.executionLimits) {
+      const limits = parseExecutionLimits(input.executionLimits);
+      await saveArtifact(requestId, "execution-limits", JSON.stringify(limits, null, 2));
     }
 
-    // approval_targets.spec 생성 (모든 artifact 저장 후)
+    // approval_targets.spec 생성 (모든 artifact 저장 후, run에 저장된 내용 기준)
+    const components = await computeSpecApprovalComponents(requestId);
+    const missing = ["request_spec", "architecture_contract", "execution_plan"].filter((k) => !components[k]);
+    if (missing.length > 0) {
+      throw new Error(`Missing artifacts for approval target: ${missing.join(", ")}`);
+    }
     const { createSpecApprovalTarget } = await import("../storage/run-storage.js");
-    await createSpecApprovalTarget(requestId, {
-      request_spec: specChecksum,
-      architecture_contract: contractChecksum,
-      execution_plan: planChecksum,
-    });
+    await createSpecApprovalTarget(requestId, components);
 
     // HUMAN_GATE_SPEC에 도달
     await transitionState(requestId, "HUMAN_GATE_SPEC");
@@ -219,17 +221,23 @@ export class WorkflowRunner {
       );
     }
 
-    // Approval target checksum 계산
-    const contractArtifact = await loadArtifact(runId, "architecture-contract");
-    const planArtifact = await loadArtifact(runId, "execution-plan");
-    const specArtifact = await loadArtifact(runId, "request-spec");
-    console.log(`[WorkflowRunner] artifacts loaded: contract=${!!contractArtifact}, plan=${!!planArtifact}, spec=${!!specArtifact}`);
-
-    const specChecksums = {
-      request_spec: calculateChecksum(specArtifact || ""),
-      architecture_contract: calculateChecksum(contractArtifact || ""),
-      execution_plan: calculateChecksum(planArtifact || ""),
-    };
+    // 현재 run 내용으로 승인 대상을 다시 계산하고, 검토된 approval target 및 기대 checksum과 일치할 때만 기록
+    const specChecksums = await computeSpecApprovalComponents(runId);
+    const reviewed = manifest.approval_targets?.spec?.components;
+    if (reviewed) {
+      const changed = diffApprovalComponents(reviewed, specChecksums);
+      if (changed.length > 0) {
+        throw new Error(`Approval target changed since it was created (${changed.join(", ")}). Not approved.`);
+      }
+    }
+    const computedTarget = computeApprovalTargetChecksum(specChecksums);
+    if (approval.expectedChecksum && approval.expectedChecksum !== computedTarget) {
+      const { InvalidWorkflowStateError } = await import("../cli/cli-errors.js");
+      throw new InvalidWorkflowStateError(
+        manifest.status,
+        `Expected checksum does not match the approval target (${computedTarget}). Not approved.`
+      );
+    }
 
     // 승인 기록 및 checksum 반환 (run-storage에서 결정론적으로 계산)
     const targetChecksum = await recordSpecApproval(runId, approval.approver, specChecksums);
@@ -322,6 +330,8 @@ export class WorkflowRunner {
 
     // 생성 프롬프트에 전달할 승인된 요구사항과 디자인 자료
     const requestSpecArtifact = await loadArtifact(runId, "request-spec");
+    const limitsArtifact = await loadArtifact(runId, "execution-limits");
+    const runLimits: ExecutionLimits | null = limitsArtifact ? parseExecutionLimits(limitsArtifact) : null;
     const tokensSnapshot = await loadArtifact(runId, "design-tokens");
     const guideSnapshot = await loadArtifact(runId, "ui-guide");
     const designContext = tokensSnapshot
@@ -340,7 +350,8 @@ export class WorkflowRunner {
       JSON.stringify(
         {
           agent: this.developerAgent.getEffectiveConfig?.() ?? null,
-          max_repair_attempts: this.getMaxRepairAttempts(),
+          run_execution_limits: runLimits,
+          max_repair_attempts: runLimits ? runLimits.max_repair_attempts : this.getMaxRepairAttempts(),
           developer_steps: ["generateCode", "generateTests", "selfValidate"],
           prompt_context: {
             request_spec: requestSpecArtifact ? calculateChecksum(requestSpecArtifact) : null,
@@ -360,6 +371,7 @@ export class WorkflowRunner {
         requestSpec: requestSpecArtifact || undefined,
         uiGuide: designContext?.uiGuide ?? null,
         designTokens: designContext?.designTokens ?? null,
+        limits: runLimits,
       });
     } catch (agentError) {
       const errorMsg = (agentError as Error).message || String(agentError);
@@ -479,7 +491,7 @@ export class WorkflowRunner {
     let finalDevResultJson = devResultJson;
     let finalValidationReport = initialValidationReport;
     let repairAttempt = 0;
-    const maxRepairAttempts = this.getMaxRepairAttempts();
+    const maxRepairAttempts = runLimits ? runLimits.max_repair_attempts : this.getMaxRepairAttempts();
 
     while (
       finalValidationReport.failed_checks > 0 &&

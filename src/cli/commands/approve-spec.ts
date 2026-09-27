@@ -26,6 +26,7 @@ export async function approveSpecCommand(
     const targetChecksum = await runner.submitSpecApproval(options["run-id"], {
       approver: options.approver,
       comment: options.comment,
+      expectedChecksum: options["expected-checksum"],
     });
 
     const output = options.json

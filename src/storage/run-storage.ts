@@ -324,41 +324,21 @@ export async function transitionState(
 ): Promise<RunMetadata> {
   const manifest = await loadManifest(runId);
 
-  // 사람 승인 게이트 검증
+  // 사람 승인 게이트 검증: 승인 대상 전체(명세·계약·계획·디자인 스냅샷·실행 한도)가 승인 시점과 같아야 진행
   if (newState === "DEV_VALIDATION_LOOP") {
     if (!manifest.spec_approval) {
       throw new Error(`SPEC approval required before DEV_VALIDATION_LOOP`);
     }
 
-    // Approval 대상 artifact 변경 여부 확인
-    const currentRequestSpec =
-      await loadArtifact(runId, "request-spec", 1);
-    const currentArchContract = await loadArtifact(
-      runId,
-      "architecture-contract",
-      1
-    );
-    const currentExecPlan = await loadArtifact(
-      runId,
-      "execution-plan",
-      1
-    );
-
-    if (currentRequestSpec) {
-      const checksum = calculateChecksum(currentRequestSpec);
-      // Use accessor for future-proof manifest field access
-      try {
-        const storedChecksum = getRequestSpecChecksum(manifest);
-        if (checksum !== manifest.spec_approval.artifact_checksums.request_spec) {
-          // 승인 무효화
-          manifest.spec_approval = undefined;
-          console.warn(`SPEC approval invalidated: request-spec changed`);
-        }
-      } catch (error) {
-        // Invalid checksum format in manifest - mark approval as invalid
-        console.warn(`SPEC approval invalidated: invalid checksum format`);
-        manifest.spec_approval = undefined;
-      }
+    const current = await computeSpecApprovalComponents(runId);
+    const changed = diffApprovalComponents(manifest.spec_approval.artifact_checksums, current);
+    if (changed.length > 0) {
+      manifest.spec_approval = undefined;
+      manifest.updated_at = new Date().toISOString();
+      await atomicWrite(securePath(runId, "manifest.json"), JSON.stringify(manifest, null, 2));
+      throw new Error(
+        `SPEC approval invalidated: checksum mismatch for ${changed.join(", ")} since approval. Re-approval required.`
+      );
     }
   }
 
@@ -409,16 +389,46 @@ export async function transitionState(
 }
 
 /**
+ * SPEC 승인 대상 구성요소: 필수 3개 + run에 있으면 디자인 스냅샷·실행 한도
+ * (선택 구성요소가 없는 기존 run은 기존과 같은 checksum이 계산된다)
+ */
+export const SPEC_APPROVAL_ARTIFACTS: Array<{ key: string; artifact: string; required: boolean }> = [
+  { key: "request_spec", artifact: "request-spec", required: true },
+  { key: "architecture_contract", artifact: "architecture-contract", required: true },
+  { key: "execution_plan", artifact: "execution-plan", required: true },
+  { key: "design_tokens", artifact: "design-tokens", required: false },
+  { key: "ui_guide", artifact: "ui-guide", required: false },
+  { key: "execution_limits", artifact: "execution-limits", required: false },
+];
+
+export async function computeSpecApprovalComponents(runId: string): Promise<Record<string, string>> {
+  const components: Record<string, string> = {};
+  for (const { key, artifact } of SPEC_APPROVAL_ARTIFACTS) {
+    const content = await loadArtifact(runId, artifact, 1);
+    if (content !== null) components[key] = calculateChecksum(content);
+  }
+  return components;
+}
+
+export function computeApprovalTargetChecksum(components: Record<string, string>): string {
+  return calculateApprovalTargetChecksum(components);
+}
+
+export function diffApprovalComponents(
+  approved: Record<string, string>,
+  current: Record<string, string>
+): string[] {
+  const keys = new Set([...Object.keys(approved), ...Object.keys(current)]);
+  return [...keys].filter((k) => approved[k] !== current[k]).sort();
+}
+
+/**
  * 승인 기록 저장 (SPEC)
  */
 export async function recordSpecApproval(
   runId: string,
   approver: string,
-  artifactChecksums: {
-    request_spec: string;
-    architecture_contract: string;
-    execution_plan: string;
-  }
+  artifactChecksums: Record<string, string>
 ): Promise<string> {
   const manifest = await loadManifest(runId);
   const now = new Date().toISOString();
@@ -456,11 +466,7 @@ export async function recordSpecApproval(
  */
 export async function createSpecApprovalTarget(
   runId: string,
-  artifactChecksums: {
-    request_spec: string;
-    architecture_contract: string;
-    execution_plan: string;
-  }
+  artifactChecksums: Record<string, string>
 ): Promise<string> {
   const manifest = await loadManifest(runId);
   const now = new Date().toISOString();

@@ -1,0 +1,18 @@
+{
+  "type": "webview-component",
+  "version": "1.0",
+  "name": "Approval target fixture",
+  "requirement": {
+    "summary": "fixture",
+    "requirements": [
+      {
+        "id": "REQ-FIX-01",
+        "text": "fixture requirement",
+        "acceptance": "fixture"
+      }
+    ]
+  },
+  "expected_files": {
+    "component": "src/App.tsx"
+  }
+}

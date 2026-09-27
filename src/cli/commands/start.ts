@@ -4,12 +4,14 @@ import { WorkflowRunner } from "../../workflow/workflow-runner.js";
 import { HumanFormatter, JsonFormatter, derivePendingAction } from "../output/formatter.js";
 import { CliError, InputFileError, WorkflowError, ExitCode } from "../cli-errors.js";
 import { loadManifest } from "../../storage/run-storage.js";
+import { parseExecutionLimits } from "../../workflow/execution-limits.js";
 
 export interface StartOptions {
   spec: string;
   contract: string;
   json?: boolean;
   agentMode: string;
+  executionLimits?: string;
 }
 
 export async function startCommand(
@@ -47,11 +49,26 @@ export async function startCommand(
     throw new InputFileError(`Invalid JSON in contract file: ${(err as Error).message}`);
   }
 
+  let limitsContent: string | undefined;
+  if (options.executionLimits) {
+    const limitsPath = path.resolve(options.executionLimits);
+    if (!fs.existsSync(limitsPath)) {
+      throw new InputFileError(`Execution limits file not found: ${limitsPath}`);
+    }
+    limitsContent = fs.readFileSync(limitsPath, "utf-8");
+    try {
+      parseExecutionLimits(limitsContent);
+    } catch (err) {
+      throw new InputFileError(`Invalid execution limits: ${(err as Error).message}`);
+    }
+  }
+
   let runId: string;
   try {
     runId = await runner.startRun({
       requestSpec: specContent,
       architectureContract: contractContent,
+      executionLimits: limitsContent,
     });
   } catch (err) {
     throw new WorkflowError(`Failed to create run: ${(err as Error).message}`);

@@ -26,6 +26,14 @@ export interface EffectiveClientConfig {
   sdk_max_retries: number;
 }
 
+/** 요청 단위 설정 (지정하지 않으면 client 설정 사용) */
+export interface ChatOptions {
+  model?: string;
+  max_tokens?: number;
+  timeout_ms?: number;
+  max_retries?: number;
+}
+
 export interface RawAgentResponse {
   stop_reason: string | null;
   usage: { input_tokens: number; output_tokens: number } | null;
@@ -54,7 +62,7 @@ export interface IAgentClient {
   /**
    * LLM에 메시지를 전송하고 응답을 받음
    */
-  chat(messages: AgentMessage[], systemPrompt?: string): Promise<AgentResponse>;
+  chat(messages: AgentMessage[], systemPrompt?: string, options?: ChatOptions): Promise<AgentResponse>;
 
   getEffectiveConfig?(): EffectiveClientConfig;
 

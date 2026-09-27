@@ -29,11 +29,8 @@ export interface RunMetadata {
   spec_approval?: {
     approver: string;
     approved_at: string;
-    artifact_checksums: {
-      request_spec: string;
-      architecture_contract: string;
-      execution_plan: string;
-    };
+    // request_spec, architecture_contract, execution_plan (+ design_tokens, ui_guide, execution_limits when present)
+    artifact_checksums: Record<string, string>;
   };
 
   release_approval?: {
@@ -49,11 +46,7 @@ export interface RunMetadata {
   approval_targets?: {
     spec?: {
       checksum: string; // SHA-256 of sorted component checksums
-      components: {
-        request_spec: string;
-        architecture_contract: string;
-        execution_plan: string;
-      };
+      components: Record<string, string>;
       created_at: string; // ISO-8601 timestamp
     };
     release?: {

@@ -1,0 +1,71 @@
+{
+  "contract_id": "req-fixture-approval-target",
+  "version": "1.0.0",
+  "pattern_type": "browser_component",
+  "issued_by": "architect_agent",
+  "folder_structure": {
+    "required_files": [
+      "src/App.tsx",
+      "src/types.ts",
+      "src/data/sampleData.ts",
+      "tests/App.test.tsx",
+      "package.json",
+      "tsconfig.json",
+      "demo/index.html"
+    ],
+    "allowed_globs": [
+      "src/**/*.{ts,tsx}",
+      "tests/**/*.{ts,tsx}",
+      "demo/**/*",
+      "*.json"
+    ]
+  },
+  "allowed_dependencies": {
+    "script_hosts": [
+      "https://cdn.tailwindcss.com"
+    ],
+    "npm_packages": [
+      "react@^18.0.0",
+      "react-dom@^18.0.0",
+      "typescript@^5.0.0"
+    ]
+  },
+  "bridge_contract_ref": {
+    "contract_id": "none",
+    "path": ""
+  },
+  "bridge_policy": {},
+  "forbidden_patterns": [
+    {
+      "id": "no-native-bridge",
+      "regex": "NHBridge|window\\.webkit\\.messageHandlers|AndroidBridge",
+      "reason": "이번 범위는 브라우저 Preview: Native Bridge 호출 금지",
+      "severity": "block"
+    },
+    {
+      "id": "no-external-api",
+      "regex": "fetch\\s*\\(|axios\\.|XMLHttpRequest|http://|https://",
+      "reason": "샘플 데이터만 사용: 외부 API·URL 호출 금지",
+      "severity": "block"
+    },
+    {
+      "id": "no-eval",
+      "regex": "\\beval\\s*\\(",
+      "reason": "eval() is a security risk",
+      "severity": "block"
+    },
+    {
+      "id": "no-hardcoded-secret",
+      "regex": "api[_-]?key|secret|token.*=.*['\\\"]",
+      "reason": "Hardcoded credentials not allowed",
+      "severity": "block"
+    },
+    {
+      "id": "prefer-design-tokens",
+      "regex": "#[0-9a-fA-F]{6}\\b",
+      "reason": "색은 design/tokens.json 기반 클래스를 사용",
+      "severity": "warn"
+    }
+  ],
+  "design_tokens_ref": "design/tokens.json"
+}

@@ -91,6 +91,7 @@ async function main() {
           options: {
             spec: { type: "string" },
             contract: { type: "string" },
+            "execution-limits": { type: "string" },
             json: { type: "boolean" },
           },
           strict: true,
@@ -98,6 +99,7 @@ async function main() {
         result = await startCommand(deps.workflowRunner, {
           spec: opts.spec as string,
           contract: opts.contract as string,
+          executionLimits: opts["execution-limits"] as string | undefined,
           json: opts.json as boolean | undefined,
           agentMode: deps.agentMode,
         });
@@ -294,6 +296,7 @@ COMMAND OPTIONS:
   start:
     --spec FILE           Request spec JSON file (required)
     --contract FILE       Architecture contract JSON file (required)
+    --execution-limits FILE  Run-specific per-step limits (stored in the run, part of the approval target)
 
   status:
     --run-id ID           Run ID (required)
