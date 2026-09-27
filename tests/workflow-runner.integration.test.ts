@@ -401,6 +401,46 @@ describe("Workflow Runner Integration Tests (with FakeValidationRunner)", () => 
         assert.equal(diagnostic.stage, "developer_execution");
         assert.ok(diagnostic.timestamp);
       }
+
+      // H-2: Verify separate CLI process rejection
+      const manifestPath = path.join(process.env.TEST_RUN_DIR!, runId, "manifest.json");
+      const manifestContent = await fs.readFile(manifestPath, "utf-8");
+      const manifest1 = JSON.parse(manifestContent);
+      const state1 = manifest1.status;
+      const events1Count = manifest1.events?.length || 0;
+
+      // Create a NEW WorkflowRunner instance (simulating separate CLI process)
+      const orchestrator2 = new AgentOrchestrator();
+      const devAgent2 = new TimeoutDeveloperAgent() as any;
+      const validRunner2 = new FakeValidationRunner([]);
+      const runner2 = new WorkflowRunner(orchestrator2, devAgent2, validRunner2);
+
+      // Attempt resume with new runner instance
+      let error2: Error | undefined;
+      try {
+        await runner2.resumeAfterSpecApproval(runId, { approver: "lead" });
+      } catch (e) {
+        error2 = e as Error;
+      }
+
+      // Should be rejected due to state
+      assert.ok(error2, "Should reject resume from NEEDS_HUMAN_REVIEW state");
+      assert.ok(
+        error2!.message.includes("Cannot resume from state NEEDS_HUMAN_REVIEW") ||
+        error2!.message.includes("Cannot resume"),
+        "Error should indicate state rejection"
+      );
+
+      // Verify state and artifacts are unchanged
+      const manifestContent2 = await fs.readFile(manifestPath, "utf-8");
+      const manifest2 = JSON.parse(manifestContent2);
+      assert.equal(manifest2.status, state1, "State should remain NEEDS_HUMAN_REVIEW");
+      assert.equal(manifest2.events?.length || 0, events1Count, "Events should not change");
+
+      // Verify diagnostic artifact still exists and unchanged
+      const diagnosticContent2 = await fs.readFile(artifactPath, "utf-8");
+      const diagnostic2 = JSON.parse(diagnosticContent2);
+      assert.equal(diagnostic2.error_type, "api_timeout", "Diagnostic should be unchanged");
     });
   });
 });
