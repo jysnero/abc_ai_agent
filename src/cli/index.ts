@@ -220,12 +220,14 @@ async function main() {
           },
           strict: true,
         });
-        result = await previewCommand({
+        // Preview command runs indefinitely - await it but don't exit
+        await previewCommand({
           "run-id": opts["run-id"] as string,
           port: opts.port ? parseInt(opts.port as string, 10) : undefined,
           json: opts.json as boolean | undefined,
         });
-        break;
+        // Never reaches here - preview command handles its own shutdown
+        return;
       }
 
       default:

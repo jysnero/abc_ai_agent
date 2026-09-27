@@ -33,7 +33,70 @@ function createPreviewServer(workspaceDir: string, port: number): http.Server {
 
     try {
       if (req.url === "/" || req.url === "") {
-        // Serve index.html if exists
+        // Priority 1: Check if src/App.tsx exists (generated React component) - serve this first
+        const appTsxPath = path.join(workspaceDir, "src", "App.tsx");
+        if (fs.existsSync(appTsxPath)) {
+          // Generate wrapper HTML that imports from src/App.tsx using esm.sh
+          const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Generated Component Preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script type="module">
+    import React from 'https://esm.sh/react@18.2.0';
+    import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
+
+    // Note: This preview loads from /src/App.tsx static file
+    // Actual React component mounting requires build step
+    // For now, displaying code as documentation
+    fetch('/src/App.tsx')
+      .then(r => r.text())
+      .then(code => {
+        const root = document.getElementById('root');
+        root.innerHTML = \`
+          <div class="max-w-4xl mx-auto p-8">
+            <div class="bg-white rounded-lg shadow p-6">
+              <h1 class="text-3xl font-bold mb-4">Generated Component: App.tsx</h1>
+              <p class="text-gray-600 mb-4">Component source code (live React mount pending build):</p>
+              <pre class="bg-gray-100 p-4 rounded overflow-auto"><code>\${code}</code></pre>
+              <p class="text-sm text-gray-500 mt-4">
+                To run the compiled component, ensure package.json has vite configured and run: npm run preview
+              </p>
+            </div>
+          </div>
+        \`;
+      })
+      .catch(err => {
+        document.getElementById('root').innerHTML = \`
+          <div class="max-w-4xl mx-auto p-8">
+            <div class="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+              <h1 class="text-2xl font-bold text-red-700 mb-2">Preview Not Ready</h1>
+              <p class="text-gray-600">src/App.tsx not found: \${err.message}</p>
+              <p class="text-sm text-gray-500 mt-4">Generated files appear here once code generation is complete.</p>
+            </div>
+          </div>
+        \`;
+      });
+  </script>
+</body>
+</html>`;
+          res.writeHead(200, { "Content-Type": "text/html" });
+          res.end(html);
+          return;
+        }
+
+        // Priority 2: Serve index.html if exists
         const indexPath = path.join(workspaceDir, "index.html");
         if (fs.existsSync(indexPath)) {
           const content = fs.readFileSync(indexPath, "utf-8");
@@ -42,7 +105,7 @@ function createPreviewServer(workspaceDir: string, port: number): http.Server {
           return;
         }
 
-        // Generate directory listing
+        // Priority 3: Generate directory listing
         const files = fs.readdirSync(workspaceDir);
         const html = `
 <!DOCTYPE html>
@@ -172,7 +235,8 @@ export async function previewCommand(
     // Start server
     const server = createPreviewServer(workspaceDir, port);
 
-    server.listen(port, () => {
+    // Store server reference to prevent GC
+    const serverRunning = () => {
       const output = {
         ok: true,
         message: `Preview server started at http://localhost:${port}`,
@@ -185,7 +249,9 @@ export async function previewCommand(
       };
 
       console.log(JSON.stringify(output, null, 2));
-    });
+    };
+
+    server.listen(port, serverRunning);
 
     server.on("error", (err: any) => {
       const output = {
@@ -197,11 +263,20 @@ export async function previewCommand(
       process.exit(1);
     });
 
-    // Keep server running
-    return {
-      output: "",
-      exitCode: ExitCode.SUCCESS,
-    };
+    // Handle graceful shutdown
+    process.on("SIGINT", () => {
+      console.log("\n[Preview] Shutting down server...");
+      server.close(() => {
+        console.log("[Preview] Server stopped");
+        process.exit(0);
+      });
+    });
+
+    // Keep server running - never return from this function
+    // Instead, wait indefinitely (server will run until SIGINT)
+    return new Promise(() => {
+      // Never resolve - keep process alive
+    }) as any;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
