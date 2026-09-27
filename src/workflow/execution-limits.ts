@@ -17,7 +17,16 @@ export interface ExecutionLimits {
   max_repair_attempts: number;
   max_logical_calls: number;
   stop_on_first_error: true;
-  steps: Record<LimitedStep, StepLimit>;
+  // 단일 흐름(generateCode/generateTests/selfValidate)용. 생성 단위 모드에서는 units를 쓴다
+  steps?: Record<LimitedStep, StepLimit>;
+  // 생성 단위 모드: 단위 id별 한도
+  units?: Record<string, StepLimit>;
+}
+
+export function limitFor(limits: ExecutionLimits, key: string): StepLimit {
+  const l = limits.units?.[key] ?? (limits.steps as Record<string, StepLimit> | undefined)?.[key];
+  if (!l) throw new Error(`execution-limits: no limit defined for "${key}"`);
+  return l;
 }
 
 const STEPS: LimitedStep[] = ["generateCode", "generateTests", "selfValidate"];
@@ -47,13 +56,22 @@ export function parseExecutionLimits(json: string): ExecutionLimits {
   if (raw.stop_on_first_error !== true) {
     throw new Error("execution-limits: stop_on_first_error must be true");
   }
-  const steps = {} as Record<LimitedStep, StepLimit>;
-  for (const s of STEPS) {
-    const step = raw.steps?.[s];
-    steps[s] = {
-      max_tokens: positiveInt(step?.max_tokens, `steps.${s}.max_tokens`),
-      timeout_ms: positiveInt(step?.timeout_ms, `steps.${s}.timeout_ms`),
-    };
+  const parseLimit = (v: any, name: string): StepLimit => ({
+    max_tokens: positiveInt(v?.max_tokens, `${name}.max_tokens`),
+    timeout_ms: positiveInt(v?.timeout_ms, `${name}.timeout_ms`),
+  });
+  if (!raw.steps && !raw.units) {
+    throw new Error("execution-limits: steps or units is required");
+  }
+  let steps: Record<LimitedStep, StepLimit> | undefined;
+  if (raw.steps) {
+    steps = {} as Record<LimitedStep, StepLimit>;
+    for (const s of STEPS) steps[s] = parseLimit(raw.steps[s], `steps.${s}`);
+  }
+  let units: Record<string, StepLimit> | undefined;
+  if (raw.units) {
+    units = {};
+    for (const [id, v] of Object.entries(raw.units)) units[id] = parseLimit(v, `units.${id}`);
   }
   return {
     model: raw.model,
@@ -62,6 +80,7 @@ export function parseExecutionLimits(json: string): ExecutionLimits {
     max_repair_attempts: nonNegativeInt(raw.max_repair_attempts, "max_repair_attempts"),
     max_logical_calls: positiveInt(raw.max_logical_calls, "max_logical_calls"),
     stop_on_first_error: true,
-    steps,
+    ...(steps ? { steps } : {}),
+    ...(units ? { units } : {}),
   };
 }

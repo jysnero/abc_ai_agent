@@ -399,6 +399,8 @@ export const SPEC_APPROVAL_ARTIFACTS: Array<{ key: string; artifact: string; req
   { key: "design_tokens", artifact: "design-tokens", required: false },
   { key: "ui_guide", artifact: "ui-guide", required: false },
   { key: "execution_limits", artifact: "execution-limits", required: false },
+  { key: "generation_plan", artifact: "generation-plan", required: false },
+  { key: "reused_files", artifact: "reused-files", required: false },
 ];
 
 export async function computeSpecApprovalComponents(runId: string): Promise<Record<string, string>> {

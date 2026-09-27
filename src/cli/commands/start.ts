@@ -12,6 +12,7 @@ export interface StartOptions {
   json?: boolean;
   agentMode: string;
   executionLimits?: string;
+  generationPlan?: string;
 }
 
 export async function startCommand(
@@ -63,12 +64,22 @@ export async function startCommand(
     }
   }
 
+  let generationPlanContent: string | undefined;
+  if (options.generationPlan) {
+    const planPath = path.resolve(options.generationPlan);
+    if (!fs.existsSync(planPath)) {
+      throw new InputFileError(`Generation plan file not found: ${planPath}`);
+    }
+    generationPlanContent = fs.readFileSync(planPath, "utf-8");
+  }
+
   let runId: string;
   try {
     runId = await runner.startRun({
       requestSpec: specContent,
       architectureContract: contractContent,
       executionLimits: limitsContent,
+      generationPlan: generationPlanContent,
     });
   } catch (err) {
     throw new WorkflowError(`Failed to create run: ${(err as Error).message}`);

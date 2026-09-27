@@ -35,6 +35,12 @@ import {
   diffApprovalComponents,
 } from "../storage/run-storage.js";
 import { parseExecutionLimits, type ExecutionLimits } from "./execution-limits.js";
+import {
+  parseGenerationPlan,
+  validateGenerationPlan,
+  resolveReusedFiles,
+  type GenerationPlan,
+} from "./generation-plan.js";
 
 // Run storage 기본 디렉터리 조회
 function getRunsBaseDir(): string {
@@ -61,6 +67,16 @@ export interface WorkflowInput {
   requestSpec: string;        // JSON 문자열
   architectureContract: string; // JSON 문자열
   executionLimits?: string;   // JSON 문자열 (run 전용 단계별 실행 한도)
+  generationPlan?: string;    // JSON 문자열 (생성 단위 계획)
+}
+
+async function resolveReusedFilesFromRuns(plan: GenerationPlan) {
+  const cache = new Map<string, string | null>();
+  for (const ref of plan.reused_files) {
+    const key = `${ref.source_run}/${ref.source_artifact}`;
+    if (!cache.has(key)) cache.set(key, await loadArtifact(ref.source_run, ref.source_artifact));
+  }
+  return resolveReusedFiles(plan, (run, artifact) => cache.get(`${run}/${artifact}`) ?? null);
 }
 
 export interface WorkflowApproval {
@@ -175,9 +191,22 @@ export class WorkflowRunner {
     await saveArtifact(requestId, "execution-plan", JSON.stringify(executionPlan, null, 2));
 
     // Run 전용 실행 한도 (승인 대상에 포함)
+    let parsedLimits: ExecutionLimits | null = null;
     if (input.executionLimits) {
-      const limits = parseExecutionLimits(input.executionLimits);
-      await saveArtifact(requestId, "execution-limits", JSON.stringify(limits, null, 2));
+      parsedLimits = parseExecutionLimits(input.executionLimits);
+      await saveArtifact(requestId, "execution-limits", JSON.stringify(parsedLimits, null, 2));
+    }
+
+    // 생성 단위 계획 + 재사용 파일 (승인 대상에 포함). 원본 run은 읽기만 한다
+    if (input.generationPlan) {
+      const genPlan = parseGenerationPlan(input.generationPlan);
+      const reqIds = (JSON.parse(input.requestSpec).requirement?.requirements || []).map((r: any) => r.id);
+      const planErrors = validateGenerationPlan(genPlan, executionPlan.target_files, reqIds, parsedLimits);
+      if (!parsedLimits) planErrors.push("generation-plan requires execution-limits with per-unit limits");
+      if (planErrors.length > 0) throw new Error(`Generation plan invalid: ${planErrors.join("; ")}`);
+      const reused = await resolveReusedFilesFromRuns(genPlan);
+      await saveArtifact(requestId, "generation-plan", JSON.stringify(genPlan, null, 2));
+      await saveArtifact(requestId, "reused-files", JSON.stringify(reused, null, 2));
     }
 
     // approval_targets.spec 생성 (모든 artifact 저장 후, run에 저장된 내용 기준)
@@ -332,6 +361,8 @@ export class WorkflowRunner {
     const requestSpecArtifact = await loadArtifact(runId, "request-spec");
     const limitsArtifact = await loadArtifact(runId, "execution-limits");
     const runLimits: ExecutionLimits | null = limitsArtifact ? parseExecutionLimits(limitsArtifact) : null;
+    const genPlanForConfigRaw = await loadArtifact(runId, "generation-plan");
+    const genPlanForConfig = genPlanForConfigRaw ? parseGenerationPlan(genPlanForConfigRaw) : null;
     const tokensSnapshot = await loadArtifact(runId, "design-tokens");
     const guideSnapshot = await loadArtifact(runId, "ui-guide");
     const designContext = tokensSnapshot
@@ -352,7 +383,8 @@ export class WorkflowRunner {
           agent: this.developerAgent.getEffectiveConfig?.() ?? null,
           run_execution_limits: runLimits,
           max_repair_attempts: runLimits ? runLimits.max_repair_attempts : this.getMaxRepairAttempts(),
-          developer_steps: ["generateCode", "generateTests", "selfValidate"],
+          developer_steps: genPlanForConfig ? genPlanForConfig.units.map((u) => u.id) : ["generateCode", "generateTests", "selfValidate"],
+          mode: genPlanForConfig ? "generation-units" : "single-flow",
           prompt_context: {
             request_spec: requestSpecArtifact ? calculateChecksum(requestSpecArtifact) : null,
             design_tokens: designContext ? { ref: designContext.designTokensRef, checksum: calculateChecksum(designContext.designTokens) } : null,
@@ -365,14 +397,36 @@ export class WorkflowRunner {
       )
     );
 
+    const genPlanArtifact = await loadArtifact(runId, "generation-plan");
+    const reusedArtifact = await loadArtifact(runId, "reused-files");
+
     let devResult;
     try {
-      devResult = await this.developerAgent.executeByPlan(executionPlan, contractArtifact || "", {
+      const generationContext = {
         requestSpec: requestSpecArtifact || undefined,
         uiGuide: designContext?.uiGuide ?? null,
         designTokens: designContext?.designTokens ?? null,
         limits: runLimits,
-      });
+      };
+      if (genPlanArtifact) {
+        // 생성 단위 모드: 승인된 계획·재사용 파일로 순차 생성, 단위마다 checkpoint 저장
+        const genPlan = parseGenerationPlan(genPlanArtifact);
+        const reused = JSON.parse(reusedArtifact || "{}") as Record<string, { content: string }>;
+        devResult = await this.developerAgent.executeUnits(genPlan, executionPlan, contractArtifact || "", {
+          ...generationContext,
+          reusedFiles: Object.fromEntries(Object.entries(reused).map(([p, v]) => [p, v.content])),
+          onCheckpoint: async (cp) => {
+            const payload: Record<string, unknown> = { unit: cp.unit, phase: cp.phase, record: cp.record, recorded_at: new Date().toISOString() };
+            if (cp.checks) payload.checks = cp.checks;
+            if (cp.files) {
+              payload.file_checksums = Object.fromEntries(Object.entries(cp.files).map(([f, c]) => [f, calculateChecksum(c)]));
+            }
+            await saveArtifact(runId, `units/${cp.unit}-${cp.phase}`, JSON.stringify(payload, null, 2));
+          },
+        });
+      } else {
+        devResult = await this.developerAgent.executeByPlan(executionPlan, contractArtifact || "", generationContext);
+      }
     } catch (agentError) {
       const errorMsg = (agentError as Error).message || String(agentError);
       if (errorMsg.includes("timed out") || errorMsg.includes("timeout")) {

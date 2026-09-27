@@ -11,7 +11,9 @@
  */
 
 import type { IAgentClient, RawAgentResponse, EffectiveClientConfig, ChatOptions } from "../runtime/agent-client.js";
-import type { ExecutionLimits } from "../workflow/execution-limits.js";
+import { limitFor, type ExecutionLimits } from "../workflow/execution-limits.js";
+import type { GenerationPlan, GenerationUnit } from "../workflow/generation-plan.js";
+import { checkUnitFile, type UnitFileCheck } from "../workflow/unit-checks.js";
 import { createAgentClient } from "../runtime/agent-client.js";
 import type { ExecutionPlan } from "../orchestrator.js";
 
@@ -24,7 +26,8 @@ export interface DeveloperAgentConfig {
   max_retries?: number;   // For smoke tests: override default retries
 }
 
-export type DeveloperStep = "generateCode" | "generateTests" | "selfValidate";
+// 단일 흐름 단계명 또는 생성 단위 id
+export type DeveloperStep = "generateCode" | "generateTests" | "selfValidate" | (string & {});
 
 export interface DeveloperStepRecord {
   step: DeveloperStep;
@@ -44,6 +47,55 @@ export interface GenerationContext {
   uiGuide?: string | null;
   designTokens?: string | null;
   limits?: ExecutionLimits | null;
+}
+
+export interface UnitCheckpoint {
+  unit: string;
+  phase: "response" | "passed" | "failed";
+  record: DeveloperStepRecord | null;
+  checks?: UnitFileCheck[];
+  files?: Record<string, string>;
+}
+
+const UNIT_SYSTEM_PROMPT =
+  "You are a professional TypeScript/React developer implementing one unit of a larger WebView service. Other units are written separately against the same Interface Contract, so follow it exactly.";
+
+function fence(file: string, code: string): string {
+  const lang = file.endsWith(".tsx") ? "tsx" : "ts";
+  return `### ${file}\n\`\`\`${lang}\n${code}\`\`\``;
+}
+
+export function buildUnitPrompt(
+  unit: GenerationUnit,
+  plan: GenerationPlan,
+  executionPlan: ExecutionPlan,
+  architectureContract: string,
+  spec: any,
+  reqById: Map<string, unknown>,
+  produced: Record<string, string>,
+  ctx: GenerationContext
+): string {
+  const reqs = unit.requirements.map((id) => reqById.get(id) ?? { id, missing: true });
+  const contextFiles = unit.context_files.map((f) => fence(f, produced[f] ?? "")).join("\n\n");
+  const platform = executionPlan.platform_files || [];
+  const parts = [
+    `## Unit\n- id: ${unit.id} (${unit.kind})\n- Files to generate (exactly these, no other files):\n${unit.files.map((f) => `  - ${f}`).join("\n")}\n- Unit instructions: ${unit.instructions}`,
+    `## Core Rules (shared by every unit; must not diverge)\n${JSON.stringify({ target: spec.target, rules: spec.requirement?.rules, sample_data: spec.requirement?.sample_data, constraints: spec.constraints, out_of_scope: spec.requirement?.out_of_scope }, null, 2)}`,
+    `## Requirements for this unit (implement all of them; do not add features)\n${JSON.stringify(reqs, null, 2)}`,
+    `## Interface Contract (shared; do not rename exports, props, callbacks or move state ownership)\n${plan.interface_contract}`,
+    contextFiles ? `## Existing files (already generated or reused — import from them, do not redefine or modify)\n${contextFiles}` : "",
+    platform.length
+      ? `## Platform-Provided Files (exist already; never generate)\n${platform.map((f) => `- ${f}`).join("\n")}\n- demo/main.tsx mounts \`import App from "../src/App"\`.\n- Tests run with vitest (jsdom) + @testing-library/react + @testing-library/user-event; jest-dom matchers are preloaded. Import test APIs from "vitest".`
+      : "",
+    `## Architecture Contract (constraints)\n${architectureContract}`,
+    unit.include_ui_guide && ctx.uiGuide ? `## UI Guide (values marked provisional are not official)\n${ctx.uiGuide}` : "",
+    unit.include_ui_guide && ctx.designTokens ? `## Design Tokens (use the token-based Tailwind classes from the UI Guide, not raw hex)\n${ctx.designTokens}` : "",
+    unit.kind === "test"
+      ? `## Test rules\nWrite the tests against the approved requirements and acceptance criteria above, NOT against whatever the existing code happens to do. Include the requirement ID in each test name (e.g. "REQ-PRED-04: ..."). Use fake timers or findBy* for the sample loading delay.`
+      : "",
+    `## Output format\nFor each file: a line "### File: <path>", then the complete file in one fenced code block. Output only the files listed for this unit.`,
+  ];
+  return parts.filter(Boolean).join("\n\n");
 }
 
 function contextSections(ctx: GenerationContext): string {
@@ -137,11 +189,12 @@ export class DeveloperAgent {
     if (limits && this.steps.length >= limits.max_logical_calls) {
       throw new IncompleteResponseError(`${step}: max_logical_calls (${limits.max_logical_calls}) reached`);
     }
-    const options: ChatOptions | null = limits
+    const stepLimit = limits ? limitFor(limits, step) : null;
+    const options: ChatOptions | null = limits && stepLimit
       ? {
           model: limits.model,
-          max_tokens: limits.steps[step].max_tokens,
-          timeout_ms: limits.steps[step].timeout_ms,
+          max_tokens: stepLimit.max_tokens,
+          timeout_ms: stepLimit.timeout_ms,
           max_retries: limits.app_max_retries,
         }
       : null;
@@ -257,6 +310,80 @@ export class DeveloperAgent {
     last.outcome = "incomplete";
     last.error = `missing files: ${missing.join(", ")}`;
     throw new IncompleteResponseError(`${step}: missing files: ${missing.join(", ")}`);
+  }
+
+  /**
+   * 생성 단위 모드: 계획의 단위를 순차 생성한다.
+   * 각 응답은 파싱 전에 checkpoint로 저장하고, 오류·불완전 응답·담당 파일 불일치·구문/경로 오류면 즉시 중단한다.
+   */
+  async executeUnits(
+    plan: GenerationPlan,
+    executionPlan: ExecutionPlan,
+    architectureContract: string,
+    context: GenerationContext & {
+      reusedFiles: Record<string, string>;
+      onCheckpoint?: (cp: UnitCheckpoint) => Promise<void>;
+    }
+  ): Promise<DeveloperAgentResult> {
+    this.context = context;
+    this.steps = [];
+    const produced: Record<string, string> = { ...context.reusedFiles };
+    const result: DeveloperAgentResult = { status: "success", generatedCode: {}, testCode: {}, selfValidation: {}, steps: this.steps };
+    const spec = context.requestSpec ? JSON.parse(context.requestSpec) : {};
+    const reqById = new Map<string, unknown>((spec.requirement?.requirements || []).map((r: any) => [r.id, r]));
+
+    for (let i = 0; i < plan.units.length; i++) {
+      const unit = plan.units[i];
+      const prompt = buildUnitPrompt(unit, plan, executionPlan, architectureContract, spec, reqById, produced, context);
+      let content: string;
+      const stepsBefore = this.steps.length;
+      try {
+        content = await this.callStep(unit.id, prompt, UNIT_SYSTEM_PROMPT);
+      } catch (error) {
+        const failedRecord = this.steps.length > stepsBefore ? this.steps[this.steps.length - 1] : null;
+        await context.onCheckpoint?.({ unit: unit.id, phase: "failed", record: failedRecord });
+        result.status = "failure";
+        result.errors = [String(error)];
+        return result;
+      }
+      const record = this.steps[this.steps.length - 1];
+      // 파싱 전에 원문·usage·stop_reason 저장
+      await context.onCheckpoint?.({ unit: unit.id, phase: "response", record });
+
+      const { files, unterminated } = parseFileSections(content);
+      const problems: string[] = [];
+      if (unterminated.length > 0) problems.push(`unterminated code block: ${unterminated.join(", ")}`);
+      const missing = unit.files.filter((f) => !(f in files));
+      if (missing.length > 0) problems.push(`missing files: ${missing.join(", ")}`);
+      const unexpected = Object.keys(files).filter((f) => !unit.files.includes(f));
+      if (unexpected.length > 0) problems.push(`unexpected files (not owned by this unit): ${unexpected.join(", ")}`);
+
+      const available = new Set([...Object.keys(produced), ...unit.files]);
+      const pending = new Set(plan.units.slice(i + 1).flatMap((u) => u.files));
+      const checks = unit.files.filter((f) => f in files).map((f) => checkUnitFile(f, files[f], available, pending));
+      for (const c of checks) {
+        if (c.syntax_errors.length) problems.push(`${c.file}: syntax: ${c.syntax_errors.join("; ")}`);
+        if (c.import_errors.length) problems.push(`${c.file}: import: ${c.import_errors.join("; ")}`);
+      }
+
+      if (problems.length > 0) {
+        record.outcome = unterminated.length || missing.length ? "incomplete" : "error";
+        record.error = problems.join(" | ");
+        await context.onCheckpoint?.({ unit: unit.id, phase: "failed", record, checks });
+        result.status = "failure";
+        result.errors = [`${unit.id}: ${record.error}`];
+        return result;
+      }
+
+      for (const f of unit.files) produced[f] = files[f];
+      await context.onCheckpoint?.({ unit: unit.id, phase: "passed", record, checks, files: Object.fromEntries(unit.files.map((f) => [f, files[f]])) });
+    }
+
+    for (const [f, code] of Object.entries(produced)) {
+      if (isTestFile(f)) result.testCode[f] = code;
+      else result.generatedCode[f] = code;
+    }
+    return result;
   }
 
   /**

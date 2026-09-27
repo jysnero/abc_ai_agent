@@ -92,6 +92,7 @@ async function main() {
             spec: { type: "string" },
             contract: { type: "string" },
             "execution-limits": { type: "string" },
+            "generation-plan": { type: "string" },
             json: { type: "boolean" },
           },
           strict: true,
@@ -100,6 +101,7 @@ async function main() {
           spec: opts.spec as string,
           contract: opts.contract as string,
           executionLimits: opts["execution-limits"] as string | undefined,
+          generationPlan: opts["generation-plan"] as string | undefined,
           json: opts.json as boolean | undefined,
           agentMode: deps.agentMode,
         });
@@ -297,6 +299,7 @@ COMMAND OPTIONS:
     --spec FILE           Request spec JSON file (required)
     --contract FILE       Architecture contract JSON file (required)
     --execution-limits FILE  Run-specific per-step limits (stored in the run, part of the approval target)
+    --generation-plan FILE   Split generation into sequential units (stored in the run, part of the approval target)
 
   status:
     --run-id ID           Run ID (required)
