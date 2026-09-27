@@ -67,8 +67,9 @@ export function buildExecutionPlan(
     target_files: targetFiles,
     bridge_usage: bridgeUsage,
     validation_commands: [
-      // v0.1: workspace script만 사용 (npm run <script>)
       { check_id: "build", command: "npm run build" },
+      { check_id: "test", command: "npm test" },
+      { check_id: "architecture-check", command: "node scripts/check-architecture.mjs" },
     ],
     completion_criteria: {
       required_files_created: targetFiles,

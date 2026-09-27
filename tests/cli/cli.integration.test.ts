@@ -603,4 +603,67 @@ describe("CLI Integration Tests (Real Process)", () => {
       if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
     }
   });
+
+  // ==================== brief Command ====================
+
+  test("brief: requires --file", () => {
+    const testRunDir = createTestRunDir();
+    try {
+      const { exitCode } = runCli(["brief"], testRunDir);
+      assert.equal(exitCode, 2, "Should exit with CLI_ARGS_ERROR");
+    } finally {
+      if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
+    }
+  });
+
+  test("brief: missing file exits 3", () => {
+    const testRunDir = createTestRunDir();
+    try {
+      const { exitCode } = runCli(["brief", "--file", "/nonexistent/path/brief.md"], testRunDir);
+      assert.equal(exitCode, 3, "Should exit with INPUT_FILE_ERROR");
+    } finally {
+      if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
+    }
+  });
+
+  test("brief: creates run at HUMAN_GATE_SPEC", () => {
+    const testRunDir = createTestRunDir();
+    try {
+      const briefContent = `# Test Component
+
+## Overview
+This is a test component for brief command validation.
+
+## Requirements
+- Feature 1
+- Feature 2
+`;
+      const briefFile = path.join(testRunDir, "brief.md");
+      fs.writeFileSync(briefFile, briefContent);
+
+      const { stdout, exitCode } = runCli(["brief", "--file", briefFile, "--json"], testRunDir);
+      assert.equal(exitCode, 0, "Should exit successfully");
+      const json = JSON.parse(stdout);
+      assert.equal(json.ok, true, "Should have ok=true");
+      assert(json.run_id, "Should contain run_id");
+      assert.equal(json.state, "HUMAN_GATE_SPEC", "Should be at HUMAN_GATE_SPEC");
+      assert(json.request_spec_summary, "Should have request_spec_summary");
+    } finally {
+      if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
+    }
+  });
+
+  test("brief: invalid contract template exits 3", () => {
+    const testRunDir = createTestRunDir();
+    try {
+      const briefContent = "# Test";
+      const briefFile = path.join(testRunDir, "brief.md");
+      fs.writeFileSync(briefFile, briefContent);
+
+      const { exitCode } = runCli(["brief", "--file", briefFile, "--template", "nonexistent/template"], testRunDir);
+      assert.equal(exitCode, 3, "Should exit with INPUT_FILE_ERROR");
+    } finally {
+      if (fs.existsSync(testRunDir)) fs.rmSync(testRunDir, { recursive: true, force: true });
+    }
+  });
 });

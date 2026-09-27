@@ -69,10 +69,11 @@ describe("Workflow Runner Integration Tests (with FakeValidationRunner)", () => 
       const devClient = new FakeAgentClient(FakeScenario.SUCCESS);
       const developerAgent = new DeveloperAgent({ client: devClient });
 
-      // Validation: passed (첫 시도)
+      // Validation: passed (첫 시도) (3 checks: build, test, architecture-check)
       const validationRunner = new FakeValidationRunner([
-        { checkId: "typecheck", status: "passed" },
         { checkId: "build", status: "passed" },
+        { checkId: "test", status: "passed" },
+        { checkId: "architecture-check", status: "passed" },
       ]);
 
       const runner = new WorkflowRunner(orchestrator, developerAgent, validationRunner);
@@ -103,13 +104,16 @@ describe("Workflow Runner Integration Tests (with FakeValidationRunner)", () => 
       const devClient = new FakeAgentClient(FakeScenario.SUCCESS);
       const developerAgent = new DeveloperAgent({ client: devClient });
 
-      // Validation: fail, then pass (repair succeeds)
+      // Validation: fail, then pass (repair succeeds) (3 checks per runSuite: build, test, architecture-check)
       const validationRunner = new FakeValidationRunner([
-        { checkId: "typecheck", status: "failed", stderr: "Type error" },
-        { checkId: "build", status: "failed" },
+        // Initial validation
+        { checkId: "build", status: "failed", stderr: "Compilation error" },
+        { checkId: "test", status: "failed" },
+        { checkId: "architecture-check", status: "failed" },
         // After repair attempt 1: pass
-        { checkId: "typecheck", status: "passed" },
         { checkId: "build", status: "passed" },
+        { checkId: "test", status: "passed" },
+        { checkId: "architecture-check", status: "passed" },
       ]);
 
       const runner = new WorkflowRunner(orchestrator, developerAgent, validationRunner);
@@ -134,19 +138,24 @@ describe("Workflow Runner Integration Tests (with FakeValidationRunner)", () => 
       const devClient = new FakeAgentClient(FakeScenario.SUCCESS);
       const developerAgent = new DeveloperAgent({ client: devClient });
 
-      // Validation: initial + 3 repairs all fail
+      // Validation: initial + 3 repairs all fail (3 checks per runSuite: build, test, architecture-check)
       const validationRunner = new FakeValidationRunner([
-        { checkId: "typecheck", status: "failed" },
+        // Initial validation
         { checkId: "build", status: "failed" },
+        { checkId: "test", status: "failed" },
+        { checkId: "architecture-check", status: "failed" },
         // Repair 1: fail
-        { checkId: "typecheck", status: "failed" },
         { checkId: "build", status: "failed" },
+        { checkId: "test", status: "failed" },
+        { checkId: "architecture-check", status: "failed" },
         // Repair 2: fail
-        { checkId: "typecheck", status: "failed" },
         { checkId: "build", status: "failed" },
+        { checkId: "test", status: "failed" },
+        { checkId: "architecture-check", status: "failed" },
         // Repair 3: fail
-        { checkId: "typecheck", status: "failed" },
         { checkId: "build", status: "failed" },
+        { checkId: "test", status: "failed" },
+        { checkId: "architecture-check", status: "failed" },
       ]);
 
       const runner = new WorkflowRunner(orchestrator, developerAgent, validationRunner);

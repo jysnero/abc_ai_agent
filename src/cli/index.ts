@@ -12,6 +12,8 @@ import { approveSpecCommand } from "./commands/approve-spec.js";
 import { resumeCommand } from "./commands/resume.js";
 import { approveReleaseCommand } from "./commands/approve-release.js";
 import { artifactsCommand } from "./commands/artifacts.js";
+import { briefCommand } from "./commands/brief.js";
+import { previewCommand } from "./commands/preview.js";
 import { createCliDependencies } from "./composition.js";
 import { CliError, ExitCode } from "./cli-errors.js";
 import { JsonFormatter } from "./output/formatter.js";
@@ -186,6 +188,42 @@ async function main() {
         break;
       }
 
+      case "brief": {
+        const { values: opts } = parseArgs({
+          args: commandArgs,
+          options: {
+            file: { type: "string" },
+            template: { type: "string" },
+            json: { type: "boolean" },
+          },
+          strict: true,
+        });
+        result = await briefCommand(deps.workflowRunner, {
+          file: opts.file as string,
+          template: opts.template as string | undefined,
+          json: opts.json as boolean | undefined,
+        });
+        break;
+      }
+
+      case "preview": {
+        const { values: opts } = parseArgs({
+          args: commandArgs,
+          options: {
+            "run-id": { type: "string" },
+            port: { type: "string" },
+            json: { type: "boolean" },
+          },
+          strict: true,
+        });
+        result = await previewCommand({
+          "run-id": opts["run-id"] as string,
+          port: opts.port ? parseInt(opts.port as string, 10) : undefined,
+          json: opts.json as boolean | undefined,
+        });
+        break;
+      }
+
       default:
         console.error(`Unknown command: ${command}`);
         printHelp();
@@ -230,12 +268,14 @@ GLOBAL OPTIONS:
   -v, --version      Show version
 
 COMMANDS:
+  brief              Process natural language planning (brief.md)
   start              Create a new workflow run
   status             Show current run status
   approve-spec       Approve specification
   resume             Resume workflow execution
   approve-release    Approve release
   artifacts          List run artifacts
+  preview            Start localhost server for generated artifacts
 
 COMMAND OPTIONS:
   start:
@@ -262,6 +302,14 @@ COMMAND OPTIONS:
 
   artifacts:
     --run-id ID           Run ID (required)
+
+  brief:
+    --file PATH           Path to brief.md file (required)
+    --template NAME       Template name (default: minigame_shell_v1)
+
+  preview:
+    --run-id ID           Run ID (required)
+    --port NUM            Port number (default: 3000)
 
   Global options: --json, --test-mode
 

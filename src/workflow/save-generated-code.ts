@@ -145,7 +145,7 @@ export function initializeWorkspace(workspaceDir: string): void {
         module: "ESNext",
         lib: ["ES2020", "DOM"],
         jsx: "react-jsx",
-        strict: false,
+        strict: true,
         esModuleInterop: true,
         skipLibCheck: true,
         forceConsistentCasingInFileNames: true,
