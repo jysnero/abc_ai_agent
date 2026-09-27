@@ -9,6 +9,7 @@
  * resumeRun → RELEASE_READY (v0.1 종료)
  */
 
+import path from "path";
 import type { AgentOrchestrator } from "../orchestrator.js";
 import type { IValidationRunner } from "../validation/validation-runner.interface.js";
 import type { ArtifactMetadata } from "../storage/run-storage.types.js";
@@ -27,6 +28,11 @@ import {
 import { calculateChecksum } from "../validation/validation-runner.js";
 import { DeveloperAgent } from "../agents/developer.js";
 import { autoRepair } from "../agents/repair-agent.js";
+
+// Run storage 기본 디렉터리 조회
+function getRunsBaseDir(): string {
+  return process.env.TEST_RUN_DIR || path.resolve(".blueprint/runs");
+}
 
 export interface WorkflowInput {
   requestSpec: string;        // JSON 문자열
@@ -254,23 +260,50 @@ export class WorkflowRunner {
     const contractArtifact = await loadArtifact(runId, "architecture-contract");
     const planArtifact = await loadArtifact(runId, "execution-plan");
 
-    // Developer Agent 실행
+    // Step 1: Developer Agent 실행
     console.log(`[WorkflowRunner] about to call developerAgent.executeByPlan`);
     const executionPlan = JSON.parse(planArtifact || "{}");
+    const contract = JSON.parse(contractArtifact || "{}");
 
     const devResult = await this.developerAgent.executeByPlan(executionPlan, contractArtifact || "");
     const devResultJson = JSON.stringify(devResult, null, 2);
 
-    // Developer result 초기값 저장 (repair-0으로 저장)
+    // Developer result 초기값 저장 (artifacts에 저장)
     await saveArtifact(runId, "developer-result-initial", devResultJson);
 
-    // Validation 실행
+    // Step 2: 생성 코드를 실제 workspace에 저장
+    const { saveGeneratedCode, initializeWorkspace } = await import("../workflow/save-generated-code.js");
+    const workspaceDir = path.join(path.dirname(getRunsBaseDir()), "workspace", runId);
+
+    initializeWorkspace(workspaceDir);
+
+    const saveResult = await saveGeneratedCode({
+      workspaceDir,
+      generatedCode: devResult.generatedCode,
+      testCode: devResult.testCode,
+      allowedGlobs: contract.folder_structure?.allowed_globs || ["src/**/*", "**/*.md"],
+      requiredFiles: contract.folder_structure?.required_files || [],
+    });
+
+    if (saveResult.errors.length > 0) {
+      console.log(`[WorkflowRunner] Code save errors: ${saveResult.errors.join(", ")}`);
+      await saveArtifact(runId, "save-errors", JSON.stringify(saveResult.errors, null, 2));
+      throw new Error(`Failed to save generated code: ${saveResult.errors.join(", ")}`);
+    }
+
+    console.log(`[WorkflowRunner] Saved ${saveResult.savedFiles.length} files to ${workspaceDir}`);
+
+    // Step 3: Workspace를 대상으로 실제 Validation 실행
     const checkIds = executionPlan.validation_commands?.map((cmd: any) => cmd.check_id) || [
       "typecheck",
       "build",
     ];
 
-    const initialValidationReport = await this.validationRunner.runSuite(
+    // Workspace 기반 검증 실행
+    const { ProcessValidationRunner } = await import("../validation/process-validation-runner.js");
+    const workspaceValidationRunner = new ProcessValidationRunner(workspaceDir);
+
+    const initialValidationReport = await workspaceValidationRunner.runSuite(
       checkIds,
       calculateChecksum(devResultJson)
     );
@@ -321,14 +354,16 @@ export class WorkflowRunner {
       );
     }
 
-    // Auto-repair loop (최대 3회)
+    // Auto-repair loop (최대 3회, smoke 모드에서는 0회)
     let finalDevResultJson = devResultJson;
     let finalValidationReport = initialValidationReport;
     let repairAttempt = 0;
+    const isSmokeTest = process.env.SMOKE_TEST === "true";
+    const maxRepairAttempts = isSmokeTest ? 0 : 3;
 
     while (
       finalValidationReport.failed_checks > 0 &&
-      repairAttempt < 3
+      repairAttempt < maxRepairAttempts
     ) {
       repairAttempt++;
 
