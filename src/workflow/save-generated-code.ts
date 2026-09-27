@@ -127,12 +127,34 @@ export function initializeWorkspace(workspaceDir: string): void {
       },
       devDependencies: {
         vitest: "^1.0.0",
-        "react-testing-library": "^14.0.0",
+        "@testing-library/react": "^14.0.0",
         "@testing-library/user-event": "^14.0.0",
         tailwindcss: "^3.0.0",
         "@types/node": "^20.0.0",
       },
     };
     fs.writeFileSync(packageJsonPath, JSON.stringify(template, null, 2), "utf-8");
+  }
+
+  // tsconfig.json 기본 템플릿 (필요시)
+  const tsconfigPath = path.join(workspaceDir, "tsconfig.json");
+  if (!fs.existsSync(tsconfigPath)) {
+    const tsconfig = {
+      compilerOptions: {
+        target: "ES2020",
+        module: "ESNext",
+        lib: ["ES2020", "DOM"],
+        jsx: "react-jsx",
+        strict: false,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        moduleResolution: "node",
+        noEmit: true,
+      },
+      include: ["src/**/*"],
+      exclude: ["node_modules", "**/*.test.tsx"],
+    };
+    fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2), "utf-8");
   }
 }

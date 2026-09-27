@@ -1,0 +1,14 @@
+{
+  "run_id": "run-003af52a-6e1b-45a0-a29a-9a0be3e46a27",
+  "final_status": "failed",
+  "total_validations": 1,
+  "total_repairs": 0,
+  "final_artifact_revision": "validation/initial",
+  "final_artifact_checksum": "sha256:3979e17fc200b3035a21d7323c4e8d92140e3c1c7037e8265dc0da9fe5904546",
+  "final_report_ref": "validation/initial",
+  "remaining_errors": [
+    "build"
+  ],
+  "termination_reason": "manual_termination",
+  "completed_at": "2026-09-27T05:16:45.351Z"
+}

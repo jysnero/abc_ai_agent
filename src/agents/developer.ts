@@ -200,7 +200,14 @@ Target files should be in tests/ directory with similar structure.
     for (let i = 1; i < matches.length; i++) {
       const lines = matches[i].split("\n");
       const filePath = lines[0].trim();
-      const code = lines.slice(1).join("\n").trim();
+      let code = lines.slice(1).join("\n").trim();
+
+      // 다음 섹션까지만 추출 (### File: 또는 ### Test: 만나면 중단)
+      const nextSectionMatch = code.match(/^###\s+(Test|File):/m);
+      if (nextSectionMatch) {
+        code = code.substring(0, nextSectionMatch.index).trim();
+      }
+
       testMap[filePath] = code;
     }
 

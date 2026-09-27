@@ -1,0 +1,29 @@
+{
+  "report_id": "val-run-003af52a-6e1b-45a0-a29a-9a0be3e46a27-initial",
+  "run_id": "run-003af52a-6e1b-45a0-a29a-9a0be3e46a27",
+  "attempt": {
+    "type": "initial",
+    "number": 0
+  },
+  "artifact_revision": "validation/initial",
+  "artifact_checksum": "sha256:3979e17fc200b3035a21d7323c4e8d92140e3c1c7037e8265dc0da9fe5904546",
+  "total_checks": 1,
+  "passed_checks": 0,
+  "failed_checks": 1,
+  "skipped_checks": 0,
+  "checks": [
+    {
+      "check_id": "build",
+      "status": "failed",
+      "exit_code": 2,
+      "duration_ms": 6419,
+      "stdout_summary": "\n> generated-component@0.1.0 build\n> tsc --noEmit\n\nsrc/Checkbox.tsx(16,9): error TS2322: Type '[boolean, Dispatch<SetStateAction<boolean>>]' is not assignable to type 'number'.\r\nsrc/Checkbox.tsx(16,9): error TS2488: Type 'number' must have a '[Symbol.iterator]()' method that returns an iterator.\r\n",
+      "stderr_summary": "",
+      "artifact_checksum": "sha256:f394cf03a50e2ee5440e6d2623d9ba2e47ddd0b0f6847e88a0eaefe874823775",
+      "started_at": "2026-09-27T05:16:38.922Z",
+      "finished_at": "2026-09-27T05:16:45.341Z"
+    }
+  ],
+  "generated_at": "2026-09-27T05:16:45.341Z",
+  "created_at": "2026-09-27T05:16:45.341Z"
+}

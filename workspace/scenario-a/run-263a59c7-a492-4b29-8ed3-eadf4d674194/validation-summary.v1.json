@@ -1,0 +1,12 @@
+{
+  "run_id": "run-263a59c7-a492-4b29-8ed3-eadf4d674194",
+  "final_status": "passed",
+  "total_validations": 1,
+  "total_repairs": 0,
+  "final_artifact_revision": "validation/initial",
+  "final_artifact_checksum": "sha256:6b0f1f84d88f13716d3398c9c505a53132660cff1200da18cc301525ac258133",
+  "final_report_ref": "validation/initial",
+  "remaining_errors": [],
+  "termination_reason": "all_checks_passed",
+  "completed_at": "2026-09-27T05:15:46.676Z"
+}

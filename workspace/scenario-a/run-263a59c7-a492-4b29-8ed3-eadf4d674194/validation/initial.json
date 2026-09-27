@@ -1,0 +1,29 @@
+{
+  "report_id": "val-run-263a59c7-a492-4b29-8ed3-eadf4d674194-initial",
+  "run_id": "run-263a59c7-a492-4b29-8ed3-eadf4d674194",
+  "attempt": {
+    "type": "initial",
+    "number": 0
+  },
+  "artifact_revision": "validation/initial",
+  "artifact_checksum": "sha256:6b0f1f84d88f13716d3398c9c505a53132660cff1200da18cc301525ac258133",
+  "total_checks": 1,
+  "passed_checks": 1,
+  "failed_checks": 0,
+  "skipped_checks": 0,
+  "checks": [
+    {
+      "check_id": "build",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 6456,
+      "stdout_summary": "\n> generated-component@0.1.0 build\n> tsc --noEmit\n\n",
+      "stderr_summary": "",
+      "artifact_checksum": "sha256:96c8afbdb7b09c6829b79ca6440e53b8a7e45b44f2e2cb3e33e49c0766f110aa",
+      "started_at": "2026-09-27T05:15:40.209Z",
+      "finished_at": "2026-09-27T05:15:46.665Z"
+    }
+  ],
+  "generated_at": "2026-09-27T05:15:46.665Z",
+  "created_at": "2026-09-27T05:15:46.665Z"
+}

@@ -67,7 +67,7 @@ export function buildExecutionPlan(
     target_files: targetFiles,
     bridge_usage: bridgeUsage,
     validation_commands: [
-      { check_id: "typecheck", command: "tsc --noEmit" },
+      // v0.1: workspace script만 사용 (npm run <script>)
       { check_id: "build", command: "npm run build" },
     ],
     completion_criteria: {
