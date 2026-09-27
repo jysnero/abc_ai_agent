@@ -345,4 +345,62 @@ describe("Workflow Runner Integration Tests (with FakeValidationRunner)", () => 
       // Workflow integration tested separately (v0.2+): timeout → NEEDS_HUMAN_REVIEW, no repair
     });
   });
+
+  describe("Scenario H: API Timeout - triggers NEEDS_HUMAN_REVIEW", () => {
+    it("should transition to NEEDS_HUMAN_REVIEW on API timeout", async () => {
+      const orchestrator = new AgentOrchestrator();
+
+      // FakeAgent that times out (simulates API timeout)
+      class TimeoutDeveloperAgent {
+        async executeByPlan() {
+          throw new Error("Request timed out after 60 seconds");
+        }
+      }
+
+      const developerAgent = new TimeoutDeveloperAgent() as any;
+      const validationRunner = new FakeValidationRunner([
+        // These should not be reached due to timeout
+        { checkId: "build", status: "passed" },
+      ]);
+
+      const runner = new WorkflowRunner(orchestrator, developerAgent, validationRunner);
+
+      const runId = await runner.startRun({
+        requestSpec: createRequestSpec("h"),
+        architectureContract: mockArchitectureContract,
+      });
+
+      let status = await runner.getRunStatus(runId);
+      assert.equal(status.status, "HUMAN_GATE_SPEC");
+
+      // Should transition to NEEDS_HUMAN_REVIEW on API timeout
+      let error: Error | undefined;
+      try {
+        await runner.resumeAfterSpecApproval(runId, { approver: "architect" });
+      } catch (e) {
+        error = e as Error;
+      }
+
+      // Should have thrown timeout error
+      assert.ok(error, "Should throw error on timeout");
+      assert.ok(error!.message.includes("timeout"), "Error should mention timeout");
+
+      // Verify final state
+      status = await runner.getRunStatus(runId);
+      assert.equal(status.status, "NEEDS_HUMAN_REVIEW", "Should be in NEEDS_HUMAN_REVIEW state");
+
+      // Verify diagnostic artifact exists
+      const artifactPath = path.join(process.env.TEST_RUN_DIR!, runId, "timeout-diagnosis.v1.json");
+      const diagnosticExists = await fs.stat(artifactPath).then(() => true).catch(() => false);
+      assert.ok(diagnosticExists, "timeout-diagnosis artifact should exist");
+
+      if (diagnosticExists) {
+        const diagnosticContent = await fs.readFile(artifactPath, "utf-8");
+        const diagnostic = JSON.parse(diagnosticContent);
+        assert.equal(diagnostic.error_type, "api_timeout");
+        assert.equal(diagnostic.stage, "developer_execution");
+        assert.ok(diagnostic.timestamp);
+      }
+    });
+  });
 });
