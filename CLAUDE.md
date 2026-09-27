@@ -76,6 +76,29 @@
 
 ---
 
+### 4. 생성 대상은 올원뱅크 모바일 WebView
+
+플랫폼이 생성하는 서비스 화면은 **NH농협은행 올원뱅크 앱 안에서 실행되는 모바일 WebView**가 대상입니다.
+
+- 공통 UI 기준: `docs/ui/allonebank-webview-guide.md`
+- 디자인 토큰: `design/tokens.json` (계약의 `design_tokens_ref`로 참조)
+- 공식 NH 디자인 가이드·폰트·로고는 아직 제공되지 않았습니다. 토큰 값은 참고 화면 샘플 또는 임시값이며 공식 규격으로 표기하지 않습니다.
+- OS 상태바, 앱 상단 헤더, 앱 하단 탭은 앱 영역입니다. 생성 코드에 복제하지 않습니다.
+- OX 퀴즈는 기술 검증용 예제입니다. 화면·문제 수·파일 경로·계약을 다른 기획에 재사용하지 않습니다.
+
+**런타임 Agent는 CLAUDE.md를 읽지 않습니다.** UI 가이드와 토큰은 다음 경로로 실제 생성 프롬프트에 전달됩니다.
+
+```
+계약 design_tokens_ref → tokens.json ($meta.guide → 가이드 문서)
+  → start 시 run에 스냅샷 저장 (design-tokens, ui-guide)
+  → resume 시 스냅샷 + 승인된 request-spec을 generateCode/generateTests/selfValidate 프롬프트에 포함
+  → 각 단계의 실제 프롬프트는 developer-result-initial.steps[].prompt에 기록
+```
+
+로컬 Preview 템플릿(`templates/browser_component/demo/index.html`)은 토큰을 CSS 변수·Tailwind 테마로 변환하고, 앱 컨테이너 모의 헤더와 화면 폭 전환 도구를 서비스 콘텐츠(`#root`) 밖에 둡니다.
+
+---
+
 ## 🔄 개발 절차
 
 ### Claude Code 사용 시

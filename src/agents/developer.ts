@@ -30,7 +30,31 @@ export interface DeveloperStepRecord {
   api_requests_started: number;
   outcome: "ok" | "error" | "incomplete";
   error?: string;
+  prompt: { system: string; user: string };
   raw: RawAgentResponse | null;
+}
+
+/**
+ * 생성 프롬프트에 전달할 승인된 요구사항과 디자인 자료 (런타임 Agent는 CLAUDE.md를 읽지 않으므로 명시적으로 전달)
+ */
+export interface GenerationContext {
+  requestSpec?: string;
+  uiGuide?: string | null;
+  designTokens?: string | null;
+}
+
+function contextSections(ctx: GenerationContext): string {
+  const parts: string[] = [];
+  if (ctx.requestSpec) {
+    parts.push(`## Approved Request Spec (source of truth for screens, copy, rules and behavior)\n${ctx.requestSpec}`);
+  }
+  if (ctx.uiGuide) {
+    parts.push(`## UI Guide (follow it; values marked provisional are not official)\n${ctx.uiGuide}`);
+  }
+  if (ctx.designTokens) {
+    parts.push(`## Design Tokens (use the token-based Tailwind classes named in the UI Guide instead of raw hex values)\n${ctx.designTokens}`);
+  }
+  return parts.join("\n\n");
 }
 
 export interface DeveloperAgentResult {
@@ -84,6 +108,7 @@ export class DeveloperAgent {
   private client: IAgentClient;
   private model: string;
   private steps: DeveloperStepRecord[] = [];
+  private context: GenerationContext = {};
 
   constructor(config: DeveloperAgentConfig = {}) {
     this.client = config.client || createAgentClient({
@@ -109,6 +134,7 @@ export class DeveloperAgent {
       step,
       api_requests_started: 1,
       outcome: "ok",
+      prompt: { system: systemPrompt, user: prompt },
       raw: null,
     };
     this.steps.push(record);
@@ -152,10 +178,12 @@ export class DeveloperAgent {
    */
   async executeByPlan(
     executionPlan: ExecutionPlan,
-    architectureContract: string
+    architectureContract: string,
+    context: GenerationContext = {}
   ): Promise<DeveloperAgentResult> {
     console.log(`📋 Developer Agent executing plan: ${executionPlan.contract_id}`);
 
+    this.context = context;
     this.steps = [];
     const result: DeveloperAgentResult = {
       status: "success",
@@ -242,8 +270,11 @@ ${platformSection}
 ## Architecture Contract (constraints)
 ${contractStr}
 
+${contextSections(this.context)}
+
 ## Task
 Generate COMPLETE, production-ready code for EACH source file listed above. Do not skip any files.
+Implement every requirement in the Approved Request Spec (if given); do not add features it does not describe.
 Do NOT write test files; tests are generated in a separate step.
 
 Output format: For each file, start with "### File: <path>" on a new line, then the complete file content.
@@ -272,7 +303,13 @@ You are writing tests for the generated code.
 
 ## Generated Code
 ${codeStr}
+${this.context.requestSpec ? `
+## Approved Request Spec
+${this.context.requestSpec}
 
+Write the tests against the approved requirements and their acceptance criteria, NOT against whatever the generated code currently does.
+Include the requirement ID in each test name (e.g. "REQ-PRD-03: ...").
+` : ""}
 ## Task
 Write comprehensive test cases covering:
 1. Main functionality
@@ -315,9 +352,12 @@ ${JSON.stringify(plan, null, 2)}
 
 ## Generated Code Summary
 ${codeStr}
-
+${this.context.requestSpec ? `
+## Approved Request Spec
+${this.context.requestSpec}
+` : ""}
 ## Task
-Check if the generated code completely implements the execution plan.
+Check if the generated code completely implements the execution plan${this.context.requestSpec ? " and the approved requirements (list uncovered requirement IDs under \"issues\")" : ""}.
 Answer in JSON format:
 {
   "completeness": "yes" | "no",

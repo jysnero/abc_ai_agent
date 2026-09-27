@@ -51,6 +51,83 @@ function walk(dir: string, base: string): string[] {
   return out;
 }
 
+export interface DesignContext {
+  designTokensRef: string;
+  designTokens: string;
+  uiGuideRef: string | null;
+  uiGuide: string | null;
+}
+
+/**
+ * 계약의 design_tokens_ref(플랫폼 루트 기준)와 토큰 파일의 $meta.guide를 읽어 생성 프롬프트용 디자인 자료를 만든다.
+ */
+export function loadDesignContext(designTokensRef: string | undefined): DesignContext | null {
+  if (!designTokensRef || designTokensRef.includes("..") || path.isAbsolute(designTokensRef)) return null;
+  const tokensPath = findPlatformPath(designTokensRef);
+  if (!tokensPath) return null;
+  const designTokens = fs.readFileSync(tokensPath, "utf-8");
+  const guideRef: unknown = JSON.parse(designTokens)?.$meta?.guide;
+  let uiGuide: string | null = null;
+  if (typeof guideRef === "string" && !guideRef.includes("..") && !path.isAbsolute(guideRef)) {
+    const guidePath = findPlatformPath(guideRef);
+    if (guidePath) uiGuide = fs.readFileSync(guidePath, "utf-8");
+  }
+  return {
+    designTokensRef,
+    designTokens,
+    uiGuideRef: typeof guideRef === "string" ? guideRef : null,
+    uiGuide,
+  };
+}
+
+type TokenEntry = { value: string | number };
+
+/**
+ * design tokens → CSS 변수 + Tailwind 테마 (demo/index.html의 자리표시자에 삽입)
+ */
+export function renderDesignTokens(designTokens: string): { css: string; tailwindConfig: string } {
+  const t = JSON.parse(designTokens);
+  const vars: string[] = [];
+  const colors: Record<string, string> = {};
+  for (const [name, entry] of Object.entries<TokenEntry>(t.color || {})) {
+    vars.push(`--color-${name}: ${entry.value};`);
+    colors[name] = `var(--color-${name})`;
+  }
+  const radius: Record<string, string> = {};
+  for (const [name, entry] of Object.entries<TokenEntry>(t.radius || {})) {
+    vars.push(`--radius-${name}: ${entry.value}px;`);
+    radius[name] = `var(--radius-${name})`;
+  }
+  for (const [name, entry] of Object.entries<TokenEntry>(t.space || {})) {
+    vars.push(`--space-${name}: ${entry.value}px;`);
+  }
+  const fontFamily = t.typography?.["font-family"]?.value;
+  if (fontFamily) vars.push(`--font-sans: ${fontFamily};`);
+  const config = {
+    theme: {
+      extend: {
+        colors,
+        borderRadius: radius,
+        ...(fontFamily ? { fontFamily: { sans: ["var(--font-sans)"] } } : {}),
+      },
+    },
+  };
+  return { css: `:root { ${vars.join(" ")} }`, tailwindConfig: JSON.stringify(config) };
+}
+
+export function applyDesignTokensToWorkspace(workspaceDir: string, designTokens: string): boolean {
+  const demo = path.join(workspaceDir, "demo", "index.html");
+  if (!fs.existsSync(demo)) return false;
+  const html = fs.readFileSync(demo, "utf-8");
+  if (!html.includes("/*__DESIGN_TOKENS_CSS__*/")) return false;
+  const { css, tailwindConfig } = renderDesignTokens(designTokens);
+  fs.writeFileSync(
+    demo,
+    html.replace("/*__DESIGN_TOKENS_CSS__*/", css).replace("/*__TAILWIND_CONFIG__*/{}", tailwindConfig)
+  );
+  return true;
+}
+
 export function listPlatformFiles(patternType: string | undefined): string[] {
   const dir = getTemplateDir(patternType);
   return dir ? walk(dir, dir).sort() : [];

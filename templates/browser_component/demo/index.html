@@ -2,12 +2,52 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OX Quiz - Browser Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>WebView Preview</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = /*__TAILWIND_CONFIG__*/{};</script>
+  <style>
+    /*__DESIGN_TOKENS_CSS__*/
+    html, body { margin: 0; }
+    body { font-family: var(--font-sans, system-ui, sans-serif); background: #dfe3e8; word-break: keep-all; }
+    /* ---- 로컬 Preview 전용: 앱 컨테이너 모의 (서비스 콘텐츠 아님) ---- */
+    .pv-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; padding: 8px 12px; font: 12px/1.4 system-ui, sans-serif; color: #3b4450; }
+    .pv-toolbar button { min-height: 32px; padding: 0 10px; border: 1px solid #b8c0ca; border-radius: 6px; background: #fff; color: #3b4450; font: inherit; cursor: pointer; }
+    .pv-toolbar button[aria-pressed="true"] { background: #3b4450; border-color: #3b4450; color: #fff; }
+    .pv-frame { margin: 0 auto; background: var(--color-surface, #fff); min-height: calc(100vh - 48px); display: flex; flex-direction: column; box-shadow: 0 0 0 1px #c5ccd4; }
+    .pv-app-header { position: sticky; top: 0; z-index: 40; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 52px; padding: 0 8px; background: #fff; border-bottom: 1px dashed #c5ccd4; font: 600 16px/1 system-ui, sans-serif; color: #1a1a1a; }
+    .pv-app-header .pv-label { text-align: center; }
+    .pv-app-header small { display: block; margin-top: 4px; font-weight: 400; font-size: 10px; color: #8a929c; }
+    .pv-app-header .pv-close { width: 44px; height: 44px; border: 0; background: none; font-size: 22px; color: #1a1a1a; cursor: not-allowed; }
+    #root { flex: 1; display: flex; flex-direction: column; }
+  </style>
 </head>
-<body class="bg-gray-50 font-sans">
-  <div id="root"></div>
+<body>
+  <div class="pv-toolbar" data-preview-only="true" role="toolbar" aria-label="Preview 화면 폭">
+    <span>Preview 폭</span>
+    <button type="button" data-width="320">320</button>
+    <button type="button" data-width="360" aria-pressed="true">360</button>
+    <button type="button" data-width="390">390</button>
+    <button type="button" data-width="430">430</button>
+    <button type="button" data-width="">전체</button>
+  </div>
+  <div class="pv-frame" id="pv-frame" style="max-width: 360px">
+    <header class="pv-app-header" data-preview-only="true">
+      <span aria-hidden="true"></span>
+      <div class="pv-label">앱 헤더<small>로컬 Preview용 앱 컨테이너 모의</small></div>
+      <button type="button" class="pv-close" aria-label="닫기 (앱 영역 모의, 동작 없음)" disabled>×</button>
+    </header>
+    <div id="root"></div>
+  </div>
+  <script>
+    document.querySelectorAll(".pv-toolbar button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        document.querySelectorAll(".pv-toolbar button").forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+        b.setAttribute("aria-pressed", "true");
+        document.getElementById("pv-frame").style.maxWidth = b.dataset.width ? b.dataset.width + "px" : "none";
+      });
+    });
+  </script>
   <script type="module" src="./dist/app.js"></script>
 </body>
 </html>

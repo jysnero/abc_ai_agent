@@ -28,7 +28,7 @@ import {
 import { calculateChecksum } from "../validation/validation-runner.js";
 import { DeveloperAgent } from "../agents/developer.js";
 import { autoRepair } from "../agents/repair-agent.js";
-import { resolveArchitectureChecker } from "./platform-template.js";
+import { loadDesignContext, resolveArchitectureChecker } from "./platform-template.js";
 
 // Run storage 기본 디렉터리 조회
 function getRunsBaseDir(): string {
@@ -140,6 +140,13 @@ export class WorkflowRunner {
 
     // Architecture Contract 저장
     await saveArtifact(requestId, "architecture-contract", input.architectureContract);
+
+    // 디자인 자료 스냅샷: 승인 검토 시점의 토큰·가이드를 run에 고정 (이후 생성은 스냅샷만 사용)
+    const design = loadDesignContext(JSON.parse(input.architectureContract).design_tokens_ref);
+    if (design) {
+      await saveArtifact(requestId, "design-tokens", design.designTokens);
+      if (design.uiGuide) await saveArtifact(requestId, "ui-guide", design.uiGuide);
+    }
 
     // 상태 전환: PLANNING → DESIGN → ARCH_CONTRACT → PLAN_BUILD
     await transitionState(requestId, "DESIGN");
@@ -313,6 +320,19 @@ export class WorkflowRunner {
     const executionPlan = JSON.parse(planArtifact || "{}");
     const contract = JSON.parse(contractArtifact || "{}");
 
+    // 생성 프롬프트에 전달할 승인된 요구사항과 디자인 자료
+    const requestSpecArtifact = await loadArtifact(runId, "request-spec");
+    const tokensSnapshot = await loadArtifact(runId, "design-tokens");
+    const guideSnapshot = await loadArtifact(runId, "ui-guide");
+    const designContext = tokensSnapshot
+      ? {
+          designTokensRef: `run:design-tokens (from ${contract.design_tokens_ref})`,
+          designTokens: tokensSnapshot,
+          uiGuideRef: guideSnapshot ? "run:ui-guide" : null,
+          uiGuide: guideSnapshot,
+        }
+      : null;
+
     // 첫 API 요청 전에 실제 적용 설정 기록 (비밀정보 제외)
     await saveArtifact(
       runId,
@@ -322,6 +342,11 @@ export class WorkflowRunner {
           agent: this.developerAgent.getEffectiveConfig?.() ?? null,
           max_repair_attempts: this.getMaxRepairAttempts(),
           developer_steps: ["generateCode", "generateTests", "selfValidate"],
+          prompt_context: {
+            request_spec: requestSpecArtifact ? calculateChecksum(requestSpecArtifact) : null,
+            design_tokens: designContext ? { ref: designContext.designTokensRef, checksum: calculateChecksum(designContext.designTokens) } : null,
+            ui_guide: designContext?.uiGuide ? { ref: designContext.uiGuideRef, checksum: calculateChecksum(designContext.uiGuide) } : null,
+          },
           recorded_at: new Date().toISOString(),
         },
         null,
@@ -331,7 +356,11 @@ export class WorkflowRunner {
 
     let devResult;
     try {
-      devResult = await this.developerAgent.executeByPlan(executionPlan, contractArtifact || "");
+      devResult = await this.developerAgent.executeByPlan(executionPlan, contractArtifact || "", {
+        requestSpec: requestSpecArtifact || undefined,
+        uiGuide: designContext?.uiGuide ?? null,
+        designTokens: designContext?.designTokens ?? null,
+      });
     } catch (agentError) {
       const errorMsg = (agentError as Error).message || String(agentError);
       if (errorMsg.includes("timed out") || errorMsg.includes("timeout")) {
@@ -354,7 +383,7 @@ export class WorkflowRunner {
     const { saveGeneratedCode, initializeWorkspace } = await import("../workflow/save-generated-code.js");
     const workspaceDir = path.join(path.dirname(getRunsBaseDir()), "workspace", runId);
 
-    initializeWorkspace(workspaceDir, contract.pattern_type);
+    initializeWorkspace(workspaceDir, contract.pattern_type, designContext?.designTokens);
 
     const saveResult = await saveGeneratedCode({
       workspaceDir,

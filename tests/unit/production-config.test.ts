@@ -7,6 +7,9 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
+import { loadDesignContext } from "../../src/workflow/platform-template.js";
+import { initializeWorkspace } from "../../src/workflow/save-generated-code.js";
 import { createCliDependencies } from "../../src/cli/composition.js";
 import { toExternalAgentMode } from "../../src/cli/output/formatter.js";
 import { ClaudeAgentClient } from "../../src/runtime/claude-agent-client.js";
@@ -172,6 +175,36 @@ describe("Production agent config (CLI real-API mode)", () => {
     assert.equal(requests.length, 1);
     assert.equal(result.steps[0].outcome, "incomplete");
     assert.match(result.steps[0].error ?? "", /unterminated code block: src\/extra\.ts/);
+  });
+
+  it("prompts carry approved spec, UI guide and design tokens; prompts are recorded per step", async () => {
+    installFetch([{ text: allTargets }, { text: testReply }, { text: "{}" }]);
+    const design = loadDesignContext("design/tokens.json");
+    assert.ok(design?.uiGuide, "UI guide should be resolved from tokens $meta.guide");
+    const spec = JSON.stringify({ requirements: [{ id: "REQ-TEST-01", text: "sample requirement" }] });
+    const result = await agent().executeByPlan(plan, contractText, {
+      requestSpec: spec,
+      uiGuide: design!.uiGuide,
+      designTokens: design!.designTokens,
+    });
+    assert.equal(result.status, "success");
+    const [code, tests, validate] = result.steps.map((s) => s.prompt.user);
+    assert.ok(code.includes("REQ-TEST-01") && code.includes("## UI Guide") && code.includes("#09862B"));
+    assert.ok(tests.includes("REQ-TEST-01") && tests.includes("NOT against whatever the generated code currently does"));
+    assert.ok(validate.includes("REQ-TEST-01"));
+  });
+
+  it("design tokens are rendered into the platform demo page", () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), "tokens-ws-"));
+    try {
+      initializeWorkspace(ws, "browser_component", fs.readFileSync("design/tokens.json", "utf-8"));
+      const html = fs.readFileSync(path.join(ws, "demo/index.html"), "utf-8");
+      assert.ok(html.includes("--color-primary: #09862B;"));
+      assert.ok(html.includes('"primary":"var(--color-primary)"'));
+      assert.ok(!html.includes("__DESIGN_TOKENS_CSS__") && !html.includes("__TAILWIND_CONFIG__"));
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
   });
 
   it("parser: strips wrapping fence, excludes unterminated (truncated) section", () => {

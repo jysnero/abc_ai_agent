@@ -8,7 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { minimatch } from "minimatch";
-import { copyPlatformTemplate } from "./platform-template.js";
+import { applyDesignTokensToWorkspace, copyPlatformTemplate } from "./platform-template.js";
 
 export interface SaveCodeOptions {
   workspaceDir: string;
@@ -117,12 +117,13 @@ export function readGeneratedFile(workspaceDir: string, filePath: string): strin
 /**
  * Workspace 생성 및 초기화
  */
-export function initializeWorkspace(workspaceDir: string, patternType?: string): void {
+export function initializeWorkspace(workspaceDir: string, patternType?: string, designTokens?: string): void {
   if (!fs.existsSync(workspaceDir)) {
     fs.mkdirSync(workspaceDir, { recursive: true });
   }
 
   if (copyPlatformTemplate(patternType, workspaceDir).length > 0) {
+    if (designTokens) applyDesignTokensToWorkspace(workspaceDir, designTokens);
     return;
   }
 
