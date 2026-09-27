@@ -24,6 +24,9 @@ export function createCliDependencies(testMode: boolean): CliDependencies {
       };
 
   const developerAgent = new DeveloperAgent(devConfig);
+
+  // ValidationRunner: instantiate with process.cwd() (platform root)
+  // WorkflowRunner will pass generated workspace path for per-run validation
   const validationRunner = new ProcessValidationRunner();
   const runner = new WorkflowRunner(orchestrator, developerAgent, validationRunner);
 
