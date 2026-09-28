@@ -93,6 +93,9 @@ export function buildUnitPrompt(
     unit.kind === "test"
       ? `## Test rules\nWrite the tests against the approved requirements and acceptance criteria above, NOT against whatever the existing code happens to do. Include the requirement ID in each test name (e.g. "REQ-PRED-04: ..."). Use fake timers or findBy* for the sample loading delay.`
       : "",
+    unit.acceptance_checks?.length
+      ? `## Acceptance checks for this unit\n- automated: write a test that asserts exactly this. Do not loosen the expected value or the condition to make it pass.\n- browser: verified separately with browser evidence (layout, pixel size, visual). Do not write a jsdom test that claims to verify it.\n${unit.acceptance_checks.map((c) => `- [${c.method}] ${c.requirement}: ${c.check}`).join("\n")}`
+      : "",
     `## Output format\nFor each file: a line "### File: <path>", then the complete file in one fenced code block. Output only the files listed for this unit.`,
   ];
   return parts.filter(Boolean).join("\n\n");

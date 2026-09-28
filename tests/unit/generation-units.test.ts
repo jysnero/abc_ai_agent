@@ -13,7 +13,7 @@ import { AgentOrchestrator } from "../../src/orchestrator.js";
 import { DeveloperAgent } from "../../src/agents/developer.js";
 import { FakeValidationRunner } from "../../src/validation/fake-validation-runner.js";
 import { initializeRun, saveArtifact, loadManifest } from "../../src/storage/run-storage.js";
-import { validateGenerationPlan, parseGenerationPlan } from "../../src/workflow/generation-plan.js";
+import { validateGenerationPlan, parseGenerationPlan, summarizeRequirementAssignment } from "../../src/workflow/generation-plan.js";
 import type { ChatOptions } from "../../src/runtime/agent-client.js";
 
 const sha = (s: string) => "sha256:" + createHash("sha256").update(s).digest("hex");
@@ -106,7 +106,50 @@ async function setupSourceRun() {
   await saveArtifact(SOURCE_RUN, "developer-result-initial", JSON.stringify({
     steps: [{ step: "generateCode", raw: { text: `### File: src/types.ts\n\`\`\`ts\n${TYPES}\`\`\`\n\n### File: src/App.tsx\n\`\`\`tsx\nexport default fun` } }],
   }));
+  const checkpoint = (phase: string) => JSON.stringify({
+    unit: "view", phase, record: { step: "view", raw: { text: reply({ "src/lib.ts": LIB, "src/App.tsx": APP }) } },
+    file_checksums: { "src/lib.ts": sha(LIB), "src/App.tsx": sha(APP) },
+  });
+  await saveArtifact(SOURCE_RUN, "units/view-passed", checkpoint("passed"));
+  await saveArtifact(SOURCE_RUN, "units/view-response", checkpoint("response"));
 }
+
+const APP_MODIFIED = APP.replace("<ul>", '<ul aria-label="목록">');
+
+// 소스를 전부 재사용하고 테스트 단위만 생성하는 계획 (App은 원본 checkpoint를 치환해 수정)
+function reuseAllPlan(mutate: (p: any) => void = () => {}) {
+  const plan = {
+    version: 1,
+    interface_contract: "INTERFACE-CONTRACT-SENTINEL: lib exports makeItems(): Item[]",
+    reused_files: [
+      { path: "src/types.ts", source_run: SOURCE_RUN, source_artifact: "developer-result-initial", source_step: "generateCode", sha256: sha(TYPES) },
+      { path: "src/lib.ts", source_run: SOURCE_RUN, source_artifact: "units/view-passed", source_step: "view", sha256: sha(LIB), requirements: ["REQ-A"] },
+      {
+        path: "src/App.tsx", source_run: SOURCE_RUN, source_artifact: "units/view-passed", source_step: "view", sha256: sha(APP), requirements: ["REQ-B"],
+        modification: { reason: "copy fix", replacements: [{ find: "<ul>", replace: '<ul aria-label="목록">' }], sha256: sha(APP_MODIFIED) },
+      },
+    ],
+    units: [
+      {
+        id: "tests", kind: "test", files: ["tests/App.test.tsx"], depends_on: [], context_files: ["src/lib.ts", "src/App.tsx"],
+        requirements: ["REQ-A", "REQ-B"], include_ui_guide: false, instructions: "tests",
+        acceptance_checks: [
+          { requirement: "REQ-A", method: "automated", check: "AUTOMATED-CHECK-SENTINEL" },
+          { requirement: "REQ-B", method: "automated", check: "list has aria-label" },
+          { requirement: "REQ-B", method: "browser", check: "BROWSER-CHECK-SENTINEL" },
+        ],
+      },
+    ],
+  };
+  mutate(plan);
+  return JSON.stringify(plan);
+}
+
+const testOnlyLimits = JSON.stringify({
+  model: "claude-opus-5-5", app_max_retries: 0, sdk_max_retries: 0, max_repair_attempts: 0, max_logical_calls: 1,
+  stop_on_first_error: true, units: { tests: { max_tokens: 3000, timeout_ms: 3000 } },
+});
+const TARGETS = ["src/types.ts", "src/lib.ts", "src/App.tsx", "tests/App.test.tsx"];
 
 async function startApproved(runner: WorkflowRunner, planJson = genPlan()) {
   const runId = await runner.startRun({ requestSpec: spec, architectureContract: contract, executionLimits: limits, generationPlan: planJson });
@@ -246,9 +289,94 @@ describe("Generation units (fake responses)", () => {
     const errs = validateGenerationPlan(plan, ["src/types.ts", "src/lib.ts", "src/App.tsx", "tests/App.test.tsx"], ["REQ-A", "REQ-B"], {
       model: "m", app_max_retries: 0, sdk_max_retries: 0, max_repair_attempts: 0, max_logical_calls: 2, stop_on_first_error: true, units: { lib: { max_tokens: 1, timeout_ms: 1 } },
     });
-    assert.ok(errs.some((e) => e.includes("REQ-A is not assigned to any source unit")));
+    assert.ok(errs.some((e) => e.includes("REQ-A is not assigned to any source unit or reused file")));
     assert.ok(errs.some((e) => e.includes("src/unknown.ts")));
     assert.ok(errs.some((e) => e.includes("no limit for unit view")));
     assert.ok(errs.some((e) => e.includes("max_logical_calls")));
+  });
+
+  it("all sources reused: plan validates, only the test unit calls the API, reused scope is not verification", async () => {
+    const plan = parseGenerationPlan(reuseAllPlan());
+    assert.deepEqual(validateGenerationPlan(plan, TARGETS, ["REQ-A", "REQ-B"], JSON.parse(testOnlyLimits)), []);
+    const summary = summarizeRequirementAssignment(plan, ["REQ-A", "REQ-B"]);
+    assert.deepEqual(summary.map((s) => [s.requirement, s.generated_by, s.reused_scope, s.verified]), [
+      ["REQ-A", [], ["src/lib.ts"], false],
+      ["REQ-B", [], ["src/App.tsx"], false],
+    ]);
+    assert.deepEqual(summary[1].tests[0], { unit: "tests", automated: ["list has aria-label"], browser: ["BROWSER-CHECK-SENTINEL"] });
+
+    const client = scriptedClient([{ content: reply({ "tests/App.test.tsx": TEST }) }]);
+    const validation = new CountingValidation([{ checkId: "build", status: "passed" }, { checkId: "test", status: "passed" }, { checkId: "architecture-check", status: "passed" }]);
+    const runner = new WorkflowRunner(new AgentOrchestrator(), new DeveloperAgent({ client }), validation);
+    const runId = await runner.startRun({ requestSpec: spec, architectureContract: contract, executionLimits: testOnlyLimits, generationPlan: reuseAllPlan() });
+    assert.equal(client.calls.length, 0, "start makes no API call");
+    await runner.submitSpecApproval(runId, { approver: "t" });
+    await runner.resumeRun(runId);
+
+    assert.equal(client.calls.length, 1);
+    const prompt = client.calls[0].user;
+    assert.ok(prompt.includes(APP_MODIFIED.trim()), "test prompt sees the modified source");
+    assert.ok(prompt.includes("[automated] REQ-A: AUTOMATED-CHECK-SENTINEL") && prompt.includes("[browser] REQ-B: BROWSER-CHECK-SENTINEL"));
+    assert.ok(prompt.includes("Do not loosen the expected value"));
+    const ws = path.join(root, "workspace", runId);
+    assert.equal(fs.readFileSync(path.join(ws, "src/App.tsx"), "utf-8"), APP_MODIFIED);
+  });
+
+  it("modified reuse keeps the original provenance and records a separate checksum", async () => {
+    const runner = new WorkflowRunner(new AgentOrchestrator(), new DeveloperAgent({ client: scriptedClient([]) }), new CountingValidation([]));
+    const runId = await runner.startRun({ requestSpec: spec, architectureContract: contract, executionLimits: testOnlyLimits, generationPlan: reuseAllPlan() });
+    const reused = JSON.parse(fs.readFileSync(path.join(runDir(runId), "reused-files.v1.json"), "utf-8"));
+    const app = reused["src/App.tsx"];
+    assert.deepEqual(app.origin, { source_run: SOURCE_RUN, source_artifact: "units/view-passed", source_step: "view", sha256: sha(APP) });
+    assert.equal(app.modified, true);
+    assert.equal(app.content_sha256, sha(APP_MODIFIED));
+    assert.notEqual(app.content_sha256, app.origin.sha256);
+    assert.equal(app.requirements_verified, false);
+    assert.deepEqual(app.assigned_requirements, ["REQ-B"]);
+    const lib = reused["src/lib.ts"];
+    assert.equal(lib.modified, false);
+    assert.equal(lib.content_sha256, lib.origin.sha256);
+  });
+
+  it("modified reuse is rejected on a wrong result checksum, a missing or repeated target, or a non-passed checkpoint", async () => {
+    const runner = new WorkflowRunner(new AgentOrchestrator(), new DeveloperAgent({ client: scriptedClient([]) }), new CountingValidation([]));
+    const start = (planJson: string) =>
+      runner.startRun({ requestSpec: spec, architectureContract: contract, executionLimits: testOnlyLimits, generationPlan: planJson });
+    await assert.rejects(start(reuseAllPlan((p) => (p.reused_files[2].modification.sha256 = sha("other")))), /modified checksum mismatch/);
+    await assert.rejects(start(reuseAllPlan((p) => (p.reused_files[2].modification.replacements[0].find = "<ol>"))), /exactly once \(found 0\)/);
+    await assert.rejects(start(reuseAllPlan((p) => (p.reused_files[2].modification.replacements[0].find = "i"))), /exactly once/);
+    await assert.rejects(start(reuseAllPlan((p) => (p.reused_files[1].source_artifact = "units/view-response"))), /not a passed unit checkpoint/);
+    await assert.rejects(start(reuseAllPlan((p) => (p.reused_files[1].sha256 = sha("x")))), /checksum mismatch/);
+    // 수정 후 checksum을 원본과 같게 기록하면 계획 단계에서 거부
+    await assert.rejects(start(reuseAllPlan((p) => (p.reused_files[2].modification.sha256 = sha(APP)))), /modified checksum equals the original/);
+  });
+
+  it("reused files go through the local syntax/import check at start", async () => {
+    const broken = APP + "export const x = ;\n";
+    const runner = new WorkflowRunner(new AgentOrchestrator(), new DeveloperAgent({ client: scriptedClient([]) }), new CountingValidation([]));
+    const planJson = reuseAllPlan((p) => {
+      p.reused_files[2].modification = { reason: "r", replacements: [{ find: APP, replace: broken }], sha256: sha(broken) };
+    });
+    await assert.rejects(
+      runner.startRun({ requestSpec: spec, architectureContract: contract, executionLimits: testOnlyLimits, generationPlan: planJson }),
+      /Reused files invalid: src\/App.tsx: syntax/
+    );
+  });
+
+  it("acceptance checks must cover every requirement of the test unit and only its requirements", () => {
+    const plan = parseGenerationPlan(reuseAllPlan((p) => {
+      p.units[0].acceptance_checks = [
+        { requirement: "REQ-B", method: "automated", check: "c" },
+        { requirement: "REQ-C", method: "automated", check: "c" },
+        { requirement: "REQ-B", method: "manual", check: "c" },
+      ];
+    }));
+    const errs = validateGenerationPlan(plan, TARGETS, ["REQ-A", "REQ-B"], JSON.parse(testOnlyLimits));
+    assert.ok(errs.some((e) => e.includes("requirement REQ-A has no acceptance check")));
+    assert.ok(errs.some((e) => e.includes("REQ-C, which is not a requirement of the unit")));
+    assert.ok(errs.some((e) => e.includes("method must be automated or browser")));
+    const noScope = parseGenerationPlan(reuseAllPlan((p) => delete p.reused_files[1].requirements));
+    assert.ok(validateGenerationPlan(noScope, TARGETS, ["REQ-A", "REQ-B"], JSON.parse(testOnlyLimits))
+      .some((e) => e.includes("REQ-A is not assigned to any source unit or reused file")));
   });
 });

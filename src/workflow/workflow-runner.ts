@@ -41,6 +41,7 @@ import {
   resolveReusedFiles,
   type GenerationPlan,
 } from "./generation-plan.js";
+import { checkUnitFile } from "./unit-checks.js";
 
 // Run storage 기본 디렉터리 조회
 function getRunsBaseDir(): string {
@@ -205,6 +206,12 @@ export class WorkflowRunner {
       if (!parsedLimits) planErrors.push("generation-plan requires execution-limits with per-unit limits");
       if (planErrors.length > 0) throw new Error(`Generation plan invalid: ${planErrors.join("; ")}`);
       const reused = await resolveReusedFilesFromRuns(genPlan);
+      // 재사용(수정본 포함) 파일도 생성 단위와 같은 로컬 구문·import 검사를 거친다 (API 호출 없음)
+      const known = new Set([...Object.keys(reused), ...genPlan.units.flatMap((u) => u.files)]);
+      const reusedProblems = Object.values(reused)
+        .map((f) => checkUnitFile(f.path, f.content, known, new Set()))
+        .flatMap((c) => [...c.syntax_errors.map((e) => `${c.file}: syntax: ${e}`), ...c.import_errors.map((e) => `${c.file}: import: ${e}`)]);
+      if (reusedProblems.length > 0) throw new Error(`Reused files invalid: ${reusedProblems.join("; ")}`);
       await saveArtifact(requestId, "generation-plan", JSON.stringify(genPlan, null, 2));
       await saveArtifact(requestId, "reused-files", JSON.stringify(reused, null, 2));
     }
