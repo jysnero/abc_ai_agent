@@ -12,7 +12,7 @@
     "orchestrate:dev": "npm run build && node dist/src/cli/index.js",
     "pretest": "npm run build",
     "test": "npm run test:unit && npm run test:workflow && npm run test:validation && npm run test:cli",
-    "test:unit": "npm run test:unit:orchestrator && npm run test:unit:plan-builder && npm run test:unit:storage && npm run test:unit:production-config && npm run test:unit:architecture-check && npm run test:unit:approval-target && npm run test:unit:generation-units",
+    "test:unit": "npm run test:unit:orchestrator && npm run test:unit:plan-builder && npm run test:unit:storage && npm run test:unit:production-config && npm run test:unit:architecture-check && npm run test:unit:approval-target && npm run test:unit:generation-units && npm run test:unit:preview-server",
     "test:unit:generation-units": "node --test --test-reporter=spec dist/tests/unit/generation-units.test.js",
     "test:unit:approval-target": "node --test --test-reporter=spec dist/tests/unit/approval-target.test.js",
     "test:unit:architecture-check": "node --test --test-reporter=spec dist/tests/unit/architecture-check.test.js",
@@ -22,7 +22,8 @@
     "test:unit:storage": "node --test --test-reporter=spec dist/tests/unit/run-storage.test.js",
     "test:workflow": "node --test --test-reporter=spec dist/tests/workflow-runner.integration.test.js",
     "test:validation": "node --test --test-reporter=spec dist/tests/integration/validation-runner.integration.test.js",
-    "test:cli": "node --test --test-reporter=spec dist/tests/cli/cli.integration.test.js"
+    "test:cli": "node --test --test-reporter=spec dist/tests/cli/cli.integration.test.js",
+    "test:unit:preview-server": "node --test --test-reporter=spec dist/tests/unit/preview-server.test.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

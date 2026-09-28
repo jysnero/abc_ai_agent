@@ -21,10 +21,23 @@ const DEMO_ENTRY = "demo/index.html";
 /**
  * Simple HTTP server to serve generated artifacts
  */
-function createPreviewServer(workspaceDir: string, port: number): http.Server {
+export function createPreviewServer(workspaceDir: string, port: number): http.Server {
   return http.createServer((req, res) => {
+    // 쿼리 문자열(?scenario= 등)은 파일 경로에서 제외
+    let urlPath: string;
+    let search: string;
+    try {
+      const url = new URL(req.url || "/", "http://localhost");
+      urlPath = decodeURIComponent(url.pathname);
+      search = url.search;
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Bad request" }));
+      return;
+    }
+
     // Security: path normalization
-    const normalizedPath = path.normalize(path.join(workspaceDir, req.url || ""));
+    const normalizedPath = path.normalize(path.join(workspaceDir, urlPath));
     const relativePath = path.relative(workspaceDir, normalizedPath);
 
     if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
@@ -34,10 +47,11 @@ function createPreviewServer(workspaceDir: string, port: number): http.Server {
     }
 
     try {
-      if (req.url === "/" || req.url === "") {
+      if (urlPath === "/" || urlPath === "") {
         // Priority 0: 플랫폼 데모 mount (실제 동작 화면)
         if (fs.existsSync(path.join(workspaceDir, DEMO_ENTRY))) {
-          res.writeHead(302, { Location: `/${DEMO_ENTRY}` });
+          // 시나리오 쿼리는 데모 화면으로 그대로 전달
+          res.writeHead(302, { Location: `/${DEMO_ENTRY}${search}` });
           res.end();
           return;
         }
@@ -155,7 +169,7 @@ function createPreviewServer(workspaceDir: string, port: number): http.Server {
         return;
       }
 
-      const filePath = path.join(workspaceDir, req.url!);
+      const filePath = normalizedPath;
 
       if (!fs.existsSync(filePath)) {
         res.writeHead(404, { "Content-Type": "application/json" });
